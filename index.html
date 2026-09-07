@@ -1,0 +1,2641 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Integral Vet</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#10151B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Integral Vet">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg: #10151B;
+    --bg2: #161D25;
+    --card: #1B232C;
+    --card2: #212B36;
+    --line: #2C3844;
+    --ink: #ECEFF2;
+    --ink-soft: #8B96A3;
+    --teal: #159AA6;
+    --teal-dk: #12444A;
+    --green: #3F8F5F;
+    --green-dk: #1E3A29;
+    --purple: #6C5CA6;
+    --purple-dk: #2E2748;
+    --blue: #3568B0;
+    --blue-dk: #1B2C49;
+    --amber: #C99A3B;
+    --red: #B5482A;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app{max-width:460px; margin:0 auto; min-height:100vh; background:var(--bg); display:flex; flex-direction:column; position:relative;}
+  header.topbar{
+    background: var(--bg2); padding:16px 20px 14px; position:sticky; top:0; z-index:5;
+    border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between;
+  }
+  header.topbar .brand{font-size:16.5px; font-weight:800; letter-spacing:0.3px;}
+  header.topbar .brand span{color:var(--teal);}
+  header.topbar .who{font-size:11px; color:var(--ink-soft); text-align:right;}
+  .backbtn{background:none; border:none; color:var(--teal); font-size:14.5px; font-weight:700; cursor:pointer; padding:0; margin-bottom:14px;}
+  main{flex:1; padding:18px 18px 40px;}
+
+  /* LOGIN */
+  .splash{text-align:center; padding:60px 24px 24px; position:relative;}
+  .selloMV{position:absolute; top:8px; right:14px; width:100px; height:100px; opacity:0.95;}
+  .splash h1{font-size:26px; font-weight:800; margin:0;}
+  .splash h1 span{color:var(--teal);}
+  .splash p{font-size:12.5px; color:var(--ink-soft); margin-top:4px; letter-spacing:0.5px;}
+  .splash .wm{font-size:11px; color:#3A4552; margin-top:30px; line-height:1.6;}
+  .loginbox{margin-top:14px; text-align:left;}
+  .remember{display:flex; align-items:center; gap:8px; margin-top:14px; font-size:12.5px; color:var(--ink-soft);}
+  .remember input{width:auto;}
+
+  label{display:block; font-size:12px; font-weight:700; color:var(--ink-soft); margin:14px 0 6px;}
+  label:first-of-type{margin-top:4px;}
+  input[type=text], input[type=password], input[type=date], input[type=number], select, textarea{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:6px;
+    font-size:14.5px; background:var(--card); color:var(--ink); font-family:inherit;
+  }
+  textarea{min-height:90px; resize:vertical; line-height:1.4;}
+  input::placeholder, textarea::placeholder{color:#5A6472;}
+  .btn{display:block; width:100%; padding:13px; border:none; border-radius:7px; font-size:14.5px; font-weight:700; cursor:pointer; margin-top:14px; font-family:inherit;}
+  .btn-teal{background:var(--teal); color:#08181A;}
+  .btn-green{background:var(--green); color:#08170F;}
+  .btn-amber{background:var(--amber); color:#2A1E05;}
+  .btn-outline{background:none; color:var(--ink); border:1px solid var(--line);}
+  .btn-danger{background:none; color:var(--red); border:1px solid var(--red);}
+
+  /* HOME GRID */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:6px;}
+  .tile{border:none; border-radius:12px; padding:20px 14px; text-align:left; cursor:pointer; min-height:118px; display:flex; flex-direction:column; justify-content:space-between; color:#fff;}
+  .tile .icon{font-size:26px;}
+  .tile .label{font-weight:800; font-size:15px; margin-top:12px;}
+  .tile .desc{font-size:11px; opacity:0.85; margin-top:2px; line-height:1.35;}
+  .tile.teal{background:linear-gradient(160deg, var(--teal), var(--teal-dk));}
+  .tile.green{background:linear-gradient(160deg, var(--green), var(--green-dk));}
+  .tile.purple{background:linear-gradient(160deg, var(--purple), var(--purple-dk));}
+  .tile.blue{background:linear-gradient(160deg, var(--blue), var(--blue-dk));}
+  .tile:active{opacity:0.88;}
+
+  .sectiontitle{font-size:12px; font-weight:700; color:var(--ink-soft); margin:22px 0 8px;}
+
+  /* LISTS / CARDS */
+  .searchbar{width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:6px; font-size:14px; background:var(--card); color:var(--ink); margin-bottom:10px;}
+  .listcard{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:13px 14px; margin-bottom:9px; cursor:pointer;}
+  .listcard .top{display:flex; justify-content:space-between; align-items:baseline;}
+  .listcard .name{font-weight:700; font-size:14.5px;}
+  .listcard .date{font-size:11px; color:var(--ink-soft);}
+  .listcard .meta{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+  .tag{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-top:6px; margin-right:5px;}
+  .tag.parcial{background:#3A2E14; color:var(--amber);}
+  .tag.finalizado{background:var(--green-dk); color:#8FD9AA;}
+  .empty{text-align:center; padding:40px 16px; color:var(--ink-soft); font-size:13.5px; line-height:1.5;}
+  .twobtn{display:flex; gap:10px;}
+  .twobtn .btn{flex:1;}
+
+  /* Species picker */
+  .speciesgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;}
+  .speciesbtn{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 10px; text-align:center; cursor:pointer; color:var(--ink);}
+  .speciesbtn .emoji{font-size:34px; display:block;}
+  .speciesbtn .lab{font-weight:700; font-size:13.5px; margin-top:8px; display:block;}
+  .speciesbtn.disabled{opacity:0.4;}
+
+  /* category menu */
+  .catlist .cattile{
+    display:flex; align-items:center; justify-content:space-between; background:var(--card);
+    border:1px solid var(--line); border-radius:8px; padding:14px 15px; margin-bottom:9px; cursor:pointer;
+  }
+  .cattile .left{display:flex; align-items:center; gap:12px;}
+  .cattile .emoji{font-size:19px;}
+  .cattile .lab{font-weight:700; font-size:14px;}
+  .cattile .check{color:#8FD9AA; font-size:16px;}
+  .statusbar{display:flex; justify-content:space-between; align-items:center; background:var(--card2); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:var(--ink-soft);}
+
+  /* option buttons (Regular/Bueno/Malo etc) */
+  .optrow{display:flex; gap:8px; margin-bottom:4px;}
+  .optbtn{flex:1; padding:11px 4px; border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--ink-soft); font-size:13px; font-weight:700; cursor:pointer; text-align:center;}
+  .optbtn.selected{background:var(--teal); border-color:var(--teal); color:#08181A;}
+
+  .sublist .subtile{
+    display:flex; align-items:center; justify-content:space-between; background:var(--card);
+    border:1px solid var(--line); border-radius:7px; padding:12px 14px; margin-bottom:8px; cursor:pointer; font-size:13.5px;
+  }
+  .subtile .check{color:#8FD9AA;}
+
+  .animalrow{display:flex; gap:6px; align-items:center; margin-bottom:8px; background:var(--card); border:1px solid var(--line); border-radius:7px; padding:8px;}
+  .animalrow .tubolab{font-size:11px; font-weight:700; color:var(--ink-soft); width:38px; flex-shrink:0;}
+  .animalrow input, .animalrow select{flex:1; padding:8px; font-size:12.5px;}
+  .removeanimal{background:none; border:none; color:var(--red); font-size:17px; cursor:pointer; padding:0 3px;}
+  .addanimalbtn{background:none; border:1px dashed var(--line); color:var(--ink-soft); width:100%; padding:9px; border-radius:7px; font-size:13px; cursor:pointer; margin-bottom:10px;}
+
+  .vacrow{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:13px 14px; margin-bottom:9px;}
+  .vacrow .top{display:flex; justify-content:space-between; align-items:center;}
+  .vacrow .lab{font-weight:700; font-size:13.5px;}
+  .vacrow .prox{font-size:11.5px; color:var(--amber); margin-top:5px;}
+  .vacbtn{background:var(--green-dk); color:#8FD9AA; border:none; border-radius:6px; padding:6px 12px; font-size:11.5px; font-weight:700; cursor:pointer;}
+  .vacbtn.done{background:var(--green); color:#08170F;}
+
+  .estabcard{background:var(--card2); border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:10px;}
+  .estabcard .esth{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .estabcard .esth b{font-size:13px;}
+  .removeestab{background:none; border:none; color:var(--red); font-size:12px; cursor:pointer;}
+  .addestabbtn{background:none; border:1px dashed var(--line); color:var(--ink-soft); width:100%; padding:9px; border-radius:7px; font-size:13px; cursor:pointer; margin:6px 0 4px;}
+
+  nav.bottomnav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:460px; background:var(--bg2); border-top:1px solid var(--line); display:flex; z-index:10;}
+  nav.bottomnav button{flex:1; background:none; border:none; padding:9px 2px 10px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:2px;}
+  nav.bottomnav .navicon{font-size:18px; opacity:0.5;}
+  nav.bottomnav .navlab{font-size:9.5px; color:var(--ink-soft); font-weight:600;}
+  nav.bottomnav button.active .navicon{opacity:1;}
+  nav.bottomnav button.active .navlab{color:var(--teal);}
+
+  .reportbox{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; font-size:12.5px; line-height:1.6; white-space:pre-wrap; margin-top:14px;}
+  .toast{position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#000; color:#fff; padding:10px 18px; border-radius:20px; font-size:13px; z-index:30; opacity:0; transition:opacity 0.25s;}
+  .toast.show{opacity:0.92;}
+  .fieldnote{font-size:11px; color:var(--ink-soft); margin-top:5px; line-height:1.4;}
+  .fotogrid{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .fotothumb{position:relative; width:64px; height:64px; border-radius:7px; overflow:hidden; border:1px solid var(--line); flex-shrink:0;}
+  .fotothumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .fotoremove{position:absolute; top:2px; right:2px; background:rgba(0,0,0,0.65); color:#fff; border:none; border-radius:50%; width:18px; height:18px; font-size:11px; cursor:pointer; line-height:1; padding:0;}
+  .fotoaddbtn{display:inline-block; margin-top:6px; padding:8px 14px; border:1px dashed var(--line); border-radius:7px; font-size:12.5px; color:var(--ink-soft); cursor:pointer;}
+  .alertcard{background:#3A2E14; border-left:3px solid var(--amber); padding:10px 12px; border-radius:6px; font-size:12.5px; margin-bottom:8px; color:var(--ink);}
+  .alertcard b{display:block; font-size:13px; margin-bottom:2px;}
+  .factbtn{padding:9px 12px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--ink-soft); font-size:12.5px; font-weight:700; cursor:pointer; flex:1;}
+  .factbtn.on{background:var(--green-dk); color:#8FD9AA; border-color:var(--green);}
+  .facturacionRow{display:flex; gap:8px; margin-top:10px;}
+  .placeholder-note{background:var(--card2); border:1px dashed var(--line); border-radius:8px; padding:18px; font-size:13px; color:var(--ink-soft); text-align:center; margin-top:16px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar" id="topbar" style="display:none;">
+    <div class="brand">INTEGRAL <span>VET</span></div>
+    <div class="who" id="whoLabel"></div>
+  </header>
+  <main id="main"></main>
+  <nav class="bottomnav" id="bottomnav" style="display:none;"></nav>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script>
+// ---------------- FIREBASE ----------------
+const firebaseConfig = {
+  apiKey: "AIzaSyA46A-OgUjghFBI5KSCQxzTfgSg42egNZY",
+  authDomain: "integral-vet-562c9.firebaseapp.com",
+  projectId: "integral-vet-562c9",
+  storageBucket: "integral-vet-562c9.firebasestorage.app",
+  messagingSenderId: "559439940184",
+  appId: "1:559439940184:web:b27e177314622401ebd82d"
+};
+firebase.initializeApp(firebaseConfig);
+const fbAuth = firebase.auth();
+const db = firebase.firestore();
+db.enablePersistence({synchronizeTabs:true}).catch(function(err){
+  console.warn('Persistencia offline no disponible:', err.code);
+});
+
+// ---------------- STATE ----------------
+let clientes = [];
+let trabajos = [];
+let auth = null;          // {usuario}
+let sesionActiva = false;
+let view = 'login';
+let editingId = null;
+let trabajoActual = null;
+let historialFiltro = 'todos';
+let historialBusqueda = '';
+let clienteBusqueda = '';
+let clienteContexto = null; // clienteId preseleccionado al iniciar un trabajo
+let clienteEstablecimientoContexto = null; // establecimientoId preseleccionado al iniciar un trabajo
+
+const SISTEMAS = ['Respiratorio','Digestivo','Circulatorio','Locomotor','Urogenital','Neurológico','Tegumentario','Sentidos especiales'];
+const SISTEMA_ICONOS = {'Respiratorio':'🫁','Digestivo':'🍽️','Circulatorio':'🫀','Locomotor':'🦴','Urogenital':'💧','Neurológico':'🧠','Tegumentario':'🩹','Sentidos especiales':'👁️'};
+function iconoSistema(s){
+  if(s==='Digestivo'){
+    const esp = trabajoActual ? trabajoActual.especie : null;
+    if(esp==='Canino'||esp==='Felino') return '🍖';
+    if(esp==='Equino'||esp==='Bovino') return '🌿';
+    return '🌿';
+  }
+  return SISTEMA_ICONOS[s];
+}
+const COMPLEMENTARIO_ICONOS = {radiografia:'🩻', ecografia:'📡', sangrado:'🩸', sangradoMasivo:'🩸🩸', otros:'➕', otro:'➕', datosAnimal:'📋'};
+const VACUNAS = [
+  {key:'adenitis', label:'Adenitis', dias:365, tipo:'vacuna'},
+  {key:'influenza', label:'Influenza', dias:90, tipo:'vacuna'},
+  {key:'encefalomielitis', label:'Encefalomielitis', dias:365, tipo:'vacuna'},
+  {key:'rabia', label:'Rabia', dias:365, tipo:'vacuna'},
+  {key:'antitetanica', label:'Antitetánica', dias:365, tipo:'vacuna'},
+  {key:'aie', label:'AIE (Anemia Infecciosa Equina)', dias:60, tipo:'análisis'},
+];
+
+// ---------------- STORAGE (Firebase, offline-first) ----------------
+let unsubClientes = null;
+let unsubTrabajos = null;
+
+function attachListeners(){
+  if(unsubClientes) unsubClientes();
+  if(unsubTrabajos) unsubTrabajos();
+  unsubClientes = db.collection('clientes').onSnapshot(function(snap){
+    clientes = snap.docs.map(function(d){ return d.data(); });
+    if(sesionActiva) render();
+  }, function(err){ console.error('Error sincronizando clientes', err); });
+  unsubTrabajos = db.collection('trabajos').onSnapshot(function(snap){
+    trabajos = snap.docs.map(function(d){ return d.data(); });
+    if(sesionActiva) render();
+  }, function(err){ console.error('Error sincronizando trabajos', err); });
+}
+function detachListeners(){
+  if(unsubClientes){ unsubClientes(); unsubClientes=null; }
+  if(unsubTrabajos){ unsubTrabajos(); unsubTrabajos=null; }
+}
+function saveClienteDoc(c){ db.collection('clientes').doc(c.id).set(c).catch(function(err){ console.error(err); }); }
+function deleteClienteDoc(id){ db.collection('clientes').doc(id).delete().catch(function(err){ console.error(err); }); }
+function saveTrabajoDoc(t){ db.collection('trabajos').doc(t.id).set(t).catch(function(err){ console.error(err); showToast('No se pudo guardar (¿informe muy pesado en fotos?)'); }); }
+function updateTrabajoDoc(id, campos){ db.collection('trabajos').doc(id).update(campos).catch(function(err){ console.error(err); }); }
+function deleteTrabajoDoc(id){ db.collection('trabajos').doc(id).delete().catch(function(err){ console.error(err); }); }
+
+window.addEventListener('online', function(){ showToast('Conectado — sincronizando cambios'); });
+window.addEventListener('offline', function(){ showToast('Sin conexión — los cambios se guardan en el dispositivo'); });
+
+// ---------------- HELPERS ----------------
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function hoyISO(){ return new Date().toISOString().slice(0,10); }
+function fmtFecha(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+function sumarDias(iso, dias){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+dias); return d.toISOString().slice(0,10); }
+function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+// ---------------- FOTOS (genérico, se usa en cualquier campo de texto) ----------------
+function leerFotoInput(inputEl, callback){
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const maxAncho = 900;
+      const escala = Math.min(1, maxAncho / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * escala;
+      canvas.height = img.height * escala;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      callback(canvas.toDataURL('image/jpeg', 0.6));
+      inputEl.value = '';
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function agregarFotoA(path, dataUrl){
+  let obj = trabajoActual;
+  for(let i=0;i<path.length-1;i++){ if(!obj[path[i]]) obj[path[i]]={}; obj=obj[path[i]]; }
+  const key = path[path.length-1];
+  if(!obj[key] || typeof obj[key]!=='object') obj[key] = {texto:'', fotos:[]};
+  if(!obj[key].fotos) obj[key].fotos=[];
+  obj[key].fotos.push(dataUrl);
+}
+function quitarFotoDe(path, idx){
+  let obj = trabajoActual;
+  for(let i=0;i<path.length-1;i++){ obj=obj[path[i]]; }
+  const key = path[path.length-1];
+  if(obj[key] && obj[key].fotos) obj[key].fotos.splice(idx,1);
+  render();
+}
+function fotosBlock(fotos, path){
+  const pathLiteral = `[${path.map(p=>`'${p}'`).join(',')}]`;
+  const inputId = 'fotoinput_' + path.join('_').replace(/[^a-zA-Z0-9_]/g,'');
+  return `
+    <div class="fotogrid">
+      ${(fotos||[]).map((f,i)=>`<div class="fotothumb"><img src="${f}"><button class="fotoremove" onclick="quitarFotoDe(${pathLiteral}, ${i})">✕</button></div>`).join('')}
+    </div>
+    <label class="fotoaddbtn" for="${inputId}">📷 Agregar foto</label>
+    <input type="file" accept="image/*" id="${inputId}" style="display:none" onchange="leerFotoInput(this, (data)=>{ agregarFotoA(${pathLiteral}, data); render(); })">
+  `;
+}
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
+function clienteNombreCompleto(c){ return [c.nombre, c.apellido].filter(Boolean).join(' ') || '(sin nombre)'; }
+function clienteById(id){ return clientes.find(c=>c.id===id); }
+
+function navigate(v){ view=v; render(); window.scrollTo(0,0); }
+function renderNav(){
+  const items = [
+    {id:'home', icon:'🏠', lab:'Inicio'},
+    {id:'clientes', icon:'👤', lab:'Clientes'},
+    {id:'nuevoTrabajoEspecie', icon:'➕', lab:'Nuevo'},
+    {id:'historial', icon:'🔍', lab:'Historial'},
+    {id:'informes', icon:'📄', lab:'Informes'},
+  ];
+  const nav = document.getElementById('bottomnav');
+  const activeGroup = (v)=> v==='nuevoTrabajoEspecie'||v==='equinoCategorias'||v.startsWith('equino-')||v==='bovinoCategorias'||v.startsWith('bovino-')||v==='mascotaCategorias'||v.startsWith('mascota-') ? 'nuevoTrabajoEspecie' : v;
+  nav.innerHTML = items.map(it=>`
+    <button class="${activeGroup(view)===it.id?'active':''}" onclick="salirANuevaSeccion('${it.id}')">
+      <span class="navicon">${it.icon}</span><span class="navlab">${it.lab}</span>
+    </button>`).join('');
+}
+function salirANuevaSeccion(id){
+  editingId=null; trabajoActual=null; clienteContexto=null; clienteEstablecimientoContexto=null; historialModo=null;
+  informesModo=null; informesBusquedaModo=null; informeVerId=null;
+  navigate(id);
+}
+
+// ---------------- ROUTER ----------------
+function render(){
+  const topbar = document.getElementById('topbar');
+  const bottomnav = document.getElementById('bottomnav');
+  const showChrome = sesionActiva;
+  topbar.style.display = showChrome ? 'flex' : 'none';
+  bottomnav.style.display = showChrome ? 'flex' : 'none';
+  if(showChrome){ document.getElementById('whoLabel').innerHTML = auth ? `${escapeHtml(auth.usuario)} · <a href="#" style="color:var(--teal)" onclick="cerrarSesion(); return false;">Salir</a>` : ''; renderNav(); }
+
+  const main = document.getElementById('main');
+  if(view==='cargando') main.innerHTML = '<div class="empty">Cargando…</div>';
+  else if(view==='login') main.innerHTML = viewLogin();
+  else if(view==='home') main.innerHTML = viewHome();
+  else if(view==='clientes') main.innerHTML = viewClientes();
+  else if(view==='clienteBuscar') main.innerHTML = viewClienteBuscar();
+  else if(view==='clientePerfil') main.innerHTML = viewClientePerfil();
+  else if(view==='clienteForm') main.innerHTML = viewClienteForm();
+  else if(view==='nuevoTrabajoEspecie') main.innerHTML = viewEspecie();
+  else if(view==='equinoCategorias') main.innerHTML = viewEquinoCategorias();
+  else if(view.startsWith('equino-')) main.innerHTML = viewEquinoCategoria(view.replace('equino-',''));
+  else if(view==='bovinoCategorias') main.innerHTML = viewBovinoCategorias();
+  else if(view.startsWith('bovino-')) main.innerHTML = viewBovinoCategoria(view.replace('bovino-',''));
+  else if(view==='mascotaCategorias') main.innerHTML = viewMascotaCategorias();
+  else if(view==='mascota-general') main.innerHTML = catMascotaGeneral();
+  else if(view==='mascota-procedimientos') main.innerHTML = catMascotaProcedimientos();
+  else if(view==='historial') main.innerHTML = viewHistorial();
+  else if(view==='trabajoDetalle') main.innerHTML = viewTrabajoDetalle();
+  else if(view==='informes') main.innerHTML = viewInformes();
+  else if(view==='informe-ver') main.innerHTML = viewInformeCompleto();
+  afterRenderHooks();
+}
+function afterRenderHooks(){
+  if(view==='clienteBuscar') filtrarClientesLive();
+}
+
+// ================= LOGIN =================
+function viewLogin(){
+  return `
+    <div class="splash">
+      <svg class="selloMV" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" role="img">
+        <title>Sello Martín Valle, Médico Veterinario</title>
+        <circle cx="80" cy="80" r="78" fill="none" stroke="#3C444C" stroke-width="2.5"/>
+        <circle cx="80" cy="80" r="52" fill="none" stroke="#0E7A85" stroke-width="2"/>
+        <path id="selloArcTop" d="M 15 80 A 65 65 0 0 1 145 80" fill="none"/>
+        <path id="selloArcBottom" d="M 22 96 A 58 58 0 0 0 138 96" fill="none"/>
+        <text font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="800" letter-spacing="1" fill="#2A323A">
+          <textPath href="#selloArcTop" startOffset="50%" text-anchor="middle">MART&#205;N VALLE</textPath>
+        </text>
+        <text font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="800" letter-spacing="0.3" fill="#2A323A">
+          <textPath href="#selloArcBottom" startOffset="50%" text-anchor="middle">M&#201;DICO VETERINARIO</textPath>
+        </text>
+        <g stroke="#3C444C" stroke-width="5" stroke-linecap="square" fill="none">
+          <line x1="48" y1="64" x2="67" y2="64"/>
+          <line x1="58" y1="64" x2="58" y2="99"/>
+          <line x1="48" y1="99" x2="67" y2="99"/>
+        </g>
+        <path d="M74 80 L86 102 L99 80 L106 80 L110 70 L115 93 L120 80 L128 80"
+              fill="none" stroke="#0E7A85" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+
+      <div style="position:relative; max-width:280px; margin:0 auto;">
+        <svg viewBox="0 0 320 385" xmlns="http://www.w3.org/2000/svg" role="img">
+          <title>Integral Vet</title>
+          <defs>
+            <linearGradient id="logoStrong" x1="0" y1="0" x2="60" y2="320" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#F5F7F9"/>
+              <stop offset="0.4" stop-color="#C7D0D8"/>
+              <stop offset="0.7" stop-color="#8A94A0"/>
+              <stop offset="1" stop-color="#5C6670"/>
+            </linearGradient>
+            <linearGradient id="logoFadeend" x1="230" y1="0" x2="290" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#8A94A0" stop-opacity="1"/>
+              <stop offset="1" stop-color="#8A94A0" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <g opacity="0.12">
+            <path d="M160 90 L190 90 L190 130 L230 130 L230 160 L190 160 L190 200 L160 200 L160 160 L120 160 L120 130 L160 130 Z" fill="#3FA6AF"/>
+          </g>
+          <g stroke="#3FA6AF" stroke-width="2" fill="none" opacity="0.28">
+            <path d="M40 60 L40 90 L70 90"/>
+            <path d="M40 260 L60 260 L60 290 L90 290"/>
+          </g>
+          <g fill="#3FA6AF" opacity="0.32">
+            <circle cx="70" cy="90" r="4"/>
+            <circle cx="90" cy="290" r="4"/>
+          </g>
+          <g stroke="url(#logoStrong)" stroke-width="9" stroke-linecap="square" fill="none">
+            <line x1="62" y1="98" x2="110" y2="98"/>
+            <line x1="86" y1="98" x2="86" y2="254"/>
+            <line x1="62" y1="254" x2="110" y2="254"/>
+          </g>
+          <path d="M125 114 L167 246 L209 114 L223 114 L230 94 L239 136 L248 114 L259 114"
+                fill="none" stroke="url(#logoStrong)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M248 114 L259 114" fill="none" stroke="url(#logoFadeend)" stroke-width="9" stroke-linecap="round"/>
+          <text x="160" y="332" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="38" letter-spacing="1" fill="#F2F4F6">INTEGRAL <tspan fill="#3FC4D1">VET</tspan></text>
+          <text x="160" y="358" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="600" font-size="13" letter-spacing="3" fill="#8FA3A8">TECNOLOG&#205;A Y SALUD ANIMAL</text>
+        </svg>
+      </div>
+
+      <div class="loginbox">
+        <label>Email</label>
+        <input type="text" id="loginUsuario" placeholder="tu@mail.com" autocomplete="username" inputmode="email">
+        <label>Contraseña</label>
+        <input type="password" id="loginPass" placeholder="Tu contraseña" autocomplete="current-password">
+        <button class="btn btn-teal" onclick="ingresar()">Ingresar</button>
+        <div class="fieldnote" style="margin-top:12px; text-align:center;">¿Olvidaste tu contraseña? <a href="#" style="color:var(--teal)" onclick="recuperarPass(); return false;">Recuperarla por mail</a></div>
+      </div>
+    </div>`;
+}
+function ingresar(){
+  const usuario = document.getElementById('loginUsuario').value.trim();
+  const pass = document.getElementById('loginPass').value.trim();
+  if(!usuario || !pass){ showToast('Completá email y contraseña'); return; }
+  fbAuth.signInWithEmailAndPassword(usuario, pass).catch(function(err){
+    showToast(mensajeErrorAuth(err));
+  });
+}
+function recuperarPass(){
+  const usuario = document.getElementById('loginUsuario').value.trim();
+  if(!usuario){ showToast('Escribí tu email arriba primero'); return; }
+  fbAuth.sendPasswordResetEmail(usuario).then(function(){
+    showToast('Te enviamos un mail para recuperar la contraseña');
+  }).catch(function(err){ showToast(mensajeErrorAuth(err)); });
+}
+function mensajeErrorAuth(err){
+  const map = {
+    'auth/invalid-email':'Email inválido',
+    'auth/user-not-found':'No existe una cuenta con ese email',
+    'auth/wrong-password':'Contraseña incorrecta',
+    'auth/invalid-credential':'Email o contraseña incorrectos',
+    'auth/too-many-requests':'Demasiados intentos, esperá un momento',
+    'auth/network-request-failed':'Sin conexión — probá cuando tengas señal',
+  };
+  return map[err.code] || 'No se pudo ingresar, probá de nuevo';
+}
+function cerrarSesion(){
+  if(!confirm('¿Cerrar sesión?')) return;
+  fbAuth.signOut();
+}
+
+// ================= HOME =================
+function proximasVacunas(){
+  const hoy = hoyISO();
+  const limite = sumarDias(hoy, 2);
+  const resultado = [];
+  trabajos.forEach(t=>{
+    if(t.especie==='Equino' && t.sanidad){
+      VACUNAS.forEach(v=>{
+        const d = t.sanidad[v.key];
+        if(d && d.proxima && d.proxima>=hoy && d.proxima<=limite){
+          resultado.push({clienteId:t.clienteId, label:v.label, fecha:d.proxima, paciente:(t.datosPaciente&&t.datosPaciente.nombre)||''});
+        }
+      });
+    }
+    if((t.especie==='Canino'||t.especie==='Felino') && t.sanidad && t.sanidad.vacuna && typeof t.sanidad.vacuna==='object'){
+      const lista = listaVacunasPara(t.especie) || [];
+      lista.forEach(v=>{
+        const d = t.sanidad.vacuna[v.key];
+        if(d && d.proxima && d.proxima>=hoy && d.proxima<=limite){
+          resultado.push({clienteId:t.clienteId, label:v.label, fecha:d.proxima, paciente:(t.informacionGeneral&&t.informacionGeneral.paciente&&t.informacionGeneral.paciente.nombre)||''});
+        }
+      });
+    }
+  });
+  resultado.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  return resultado;
+}
+function viewHome(){
+  const hoy = hoyISO();
+  const en7 = sumarDias(hoy, 7);
+  const enCurso = trabajos.filter(t=>t.estado==='parcial').length;
+  const vacunas = proximasVacunas();
+  return `
+    ${vacunas.length ? `
+      <div class="sectiontitle">Vacunas próximas (2 días)</div>
+      ${vacunas.map(v=>{
+        const cliente = v.clienteId?clienteById(v.clienteId):null;
+        return `<div class="alertcard">
+          <b>${fmtFecha(v.fecha)} · ${v.label}</b>
+          ${v.paciente?escapeHtml(v.paciente):''}${cliente?' · '+escapeHtml(clienteNombreCompleto(cliente)):''}
+        </div>`;
+      }).join('')}
+      <div class="fieldnote" style="margin-bottom:14px;">Esto se muestra solo cuando abrís la app — no es una notificación push del celular.</div>
+    ` : ''}
+    <div class="grid2">
+      <button class="tile teal" onclick="salirANuevaSeccion('clientes')">
+        <div class="icon">👤</div>
+        <div><div class="label">Clientes</div><div class="desc">Buscar y nuevo cliente</div></div>
+      </button>
+      <button class="tile green" onclick="salirANuevaSeccion('nuevoTrabajoEspecie')">
+        <div class="icon">➕</div>
+        <div><div class="label">Nuevo trabajo</div><div class="desc">Iniciar o continuar</div></div>
+      </button>
+      <button class="tile purple" onclick="salirANuevaSeccion('historial')">
+        <div class="icon">🕒</div>
+        <div><div class="label">Historial</div><div class="desc">Trabajos realizados</div></div>
+      </button>
+      <button class="tile blue" onclick="salirANuevaSeccion('informes')">
+        <div class="icon">📄</div>
+        <div><div class="label">Informes</div><div class="desc">Ver y compartir</div></div>
+      </button>
+    </div>
+    ${enCurso ? `<div class="sectiontitle">Tenés ${enCurso} trabajo${enCurso===1?'':'s'} en curso</div>
+      <div class="fieldnote" style="margin-bottom:8px;">Buscalos en Historial para continuarlos.</div>` : ''}
+  `;
+}
+
+// ================= CLIENTES =================
+function viewClientes(){
+  return `
+    <div class="sectiontitle">Clientes (${clientes.length})</div>
+    <div class="twobtn">
+      <button class="btn btn-outline" onclick="nuevoCliente()">+ Nuevo cliente</button>
+      <button class="btn btn-teal" onclick="navigate('clienteBuscar')">🔍 Buscar</button>
+    </div>
+  `;
+}
+function nuevoCliente(){ editingId=null; navigate('clienteForm'); }
+
+function viewClienteBuscar(){
+  return `
+    <button class="backbtn" onclick="navigate('clientes')">‹ Clientes</button>
+    <input class="searchbar" placeholder="Buscar por nombre, razón social o RENSPA..." id="buscaCliente" oninput="filtrarClientesLive()">
+    <div id="listaClientes"></div>
+  `;
+}
+function filtrarClientesLive(){
+  const el = document.getElementById('buscaCliente');
+  const q = (el ? el.value : '').toLowerCase();
+  const cont = document.getElementById('listaClientes');
+  if(!cont) return;
+  const filtrados = clientes.filter(c=>{
+    const estabTxt = (c.establecimientos||[]).map(e=>e.nombre+' '+(e.renspa||'')).join(' ').toLowerCase();
+    return clienteNombreCompleto(c).toLowerCase().includes(q) || estabTxt.includes(q) || (c.direccion||'').toLowerCase().includes(q);
+  });
+  if(!filtrados.length){ cont.innerHTML = `<div class="empty">No hay clientes que coincidan.</div>`; return; }
+  cont.innerHTML = filtrados.map(c=>{
+    const nTrab = trabajos.filter(t=>t.clienteId===c.id).length;
+    return `<div class="listcard" onclick="abrirClientePerfil('${c.id}')">
+      <div class="top"><div class="name">${escapeHtml(clienteNombreCompleto(c))}</div></div>
+      <div class="meta">${(c.establecimientos||[]).map(e=>escapeHtml(e.nombre)).join(', ') || 'Sin establecimientos cargados'}</div>
+      <span class="tag finalizado">${nTrab} trabajo${nTrab===1?'':'s'}</span>
+    </div>`;
+  }).join('');
+}
+function abrirClientePerfil(id){ editingId=id; navigate('clientePerfil'); }
+
+function viewClientePerfil(){
+  const c = clienteById(editingId);
+  if(!c) return `<div class="empty">Este cliente ya no existe.</div>`;
+  const trabs = trabajos.filter(t=>t.clienteId===c.id).sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''));
+  return `
+    <button class="backbtn" onclick="navigate('clienteBuscar')">‹ Buscar</button>
+    <div class="sectiontitle">${escapeHtml(clienteNombreCompleto(c))}</div>
+    <div class="listcard" style="cursor:default;">
+      <div class="meta">${escapeHtml(c.direccion || 'Sin dirección cargada')}</div>
+      ${(c.establecimientos||[]).map(e=>`
+        <div class="estabcard" style="margin-top:10px;">
+          <div class="esth"><b>${escapeHtml(e.nombre)}</b></div>
+          <div class="meta">RENSPA: ${escapeHtml(e.renspa)||'—'}</div>
+          ${e.ubicacion ? `<div class="meta">${escapeHtml(e.ubicacion)}</div>` : ''}
+        </div>`).join('') || '<div class="fieldnote">Sin establecimientos cargados.</div>'}
+    </div>
+    <div class="twobtn">
+      <button class="btn btn-outline" onclick="editingId='${c.id}'; navigate('clienteForm')">Editar cliente</button>
+      <button class="btn btn-green" onclick="iniciarTrabajoConCliente('${c.id}')">+ Nuevo trabajo</button>
+    </div>
+    <div class="sectiontitle">Trabajos (${trabs.length})</div>
+    ${trabs.length ? trabs.map(t=>renderTrabajoListCard(t)).join('') : '<div class="fieldnote">Todavía no hay trabajos registrados para este cliente.</div>'}
+  `;
+}
+function iniciarTrabajoConCliente(clienteId){ clienteContexto = clienteId; clienteEstablecimientoContexto=null; editingId=null; navigate('nuevoTrabajoEspecie'); }
+
+function viewClienteForm(){
+  const c = editingId ? clienteById(editingId) : null;
+  window._establecimientosTmp = c ? JSON.parse(JSON.stringify(c.establecimientos||[])) : [];
+  if(!window._establecimientosTmp.length) window._establecimientosTmp.push({id:uid(), nombre:'Establecimiento 1', renspa:'', ubicacion:''});
+  return `
+    <button class="backbtn" onclick="navigate(${c?"'clientePerfil'":"'clientes'"})">‹ Volver</button>
+    <div class="sectiontitle">${c?'Editar cliente':'Nuevo cliente'}</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Ningún dato es obligatorio, pero cuanto más completes, mejor.</div>
+    <label>Nombre</label>
+    <input type="text" id="f_nombre" value="${c?escapeHtml(c.nombre||''):''}">
+    <label>Apellido</label>
+    <input type="text" id="f_apellido" value="${c?escapeHtml(c.apellido||''):''}">
+    <label>Dirección</label>
+    <input type="text" id="f_direccion" value="${c?escapeHtml(c.direccion||''):''}">
+    <div class="sectiontitle">Establecimientos</div>
+    <div id="establecimientosList"></div>
+    <button type="button" class="addestabbtn" onclick="agregarEstablecimiento()">+ Agregar establecimiento</button>
+    <button class="btn btn-outline" onclick="guardarCliente(false)">Guardar</button>
+    <button class="btn btn-green" onclick="guardarCliente(true)">Guardar y pasar a nuevo trabajo</button>
+    ${c ? `<button class="btn btn-danger" onclick="eliminarCliente('${c.id}')">Eliminar cliente</button>` : ''}
+  `;
+}
+function renderEstablecimientos(){
+  const el = document.getElementById('establecimientosList');
+  if(!el) return;
+  const arr = window._establecimientosTmp;
+  el.innerHTML = arr.map((e,i)=>`
+    <div class="estabcard">
+      <div class="esth">
+        <input type="text" style="font-weight:700; border:none; background:none; padding:0; font-size:13.5px;" value="${escapeHtml(e.nombre)}" onchange="window._establecimientosTmp[${i}].nombre=this.value">
+        ${arr.length>1 ? `<button class="removeestab" onclick="quitarEstablecimiento(${i})">Quitar</button>` : ''}
+      </div>
+      <label style="margin-top:0;">RENSPA</label>
+      <input type="text" value="${escapeHtml(e.renspa)}" onchange="window._establecimientosTmp[${i}].renspa=this.value">
+      <label>Ubicación</label>
+      <input type="text" value="${escapeHtml(e.ubicacion)}" onchange="window._establecimientosTmp[${i}].ubicacion=this.value">
+    </div>`).join('');
+}
+function agregarEstablecimiento(){
+  window._establecimientosTmp.push({id:uid(), nombre:`Establecimiento ${window._establecimientosTmp.length+1}`, renspa:'', ubicacion:''});
+  renderEstablecimientos();
+}
+function quitarEstablecimiento(i){ window._establecimientosTmp.splice(i,1); renderEstablecimientos(); }
+
+function guardarCliente(irANuevoTrabajo){
+  const data = {
+    nombre: document.getElementById('f_nombre').value.trim(),
+    apellido: document.getElementById('f_apellido').value.trim(),
+    direccion: document.getElementById('f_direccion').value.trim(),
+    establecimientos: window._establecimientosTmp,
+  };
+  let id = editingId;
+  let clienteFinal;
+  if(editingId){
+    clienteFinal = Object.assign(clienteById(editingId), data);
+  } else {
+    id = uid();
+    clienteFinal = {id, ...data};
+    clientes.push(clienteFinal);
+  }
+  saveClienteDoc(clienteFinal);
+  showToast('Cliente guardado');
+  if(irANuevoTrabajo){ clienteContexto = id; clienteEstablecimientoContexto=null; editingId=null; navigate('nuevoTrabajoEspecie'); }
+  else { editingId=id; navigate('clientePerfil'); }
+}
+function eliminarCliente(id){
+  if(!confirm('¿Eliminar este cliente? Los trabajos registrados se conservan.')) return;
+  clientes = clientes.filter(c=>c.id!==id);
+  deleteClienteDoc(id);
+  navigate('clientes');
+}
+
+// ================= NUEVO TRABAJO: ESPECIE =================
+function viewEspecie(){
+  const cliente = clienteContexto ? clienteById(clienteContexto) : null;
+  if(cliente && cliente.establecimientos && cliente.establecimientos.length){
+    if(cliente.establecimientos.length===1 && !clienteEstablecimientoContexto){
+      clienteEstablecimientoContexto = cliente.establecimientos[0].id;
+    }
+    if(cliente.establecimientos.length>1 && !clienteEstablecimientoContexto){
+      return viewEspecieElegirEstablecimiento(cliente);
+    }
+  }
+  const establecimiento = (cliente && clienteEstablecimientoContexto) ? (cliente.establecimientos||[]).find(e=>e.id===clienteEstablecimientoContexto) : null;
+  return `
+    <div class="sectiontitle">${cliente ? 'Cliente: '+escapeHtml(clienteNombreCompleto(cliente)) : 'Sin cliente asociado'}</div>
+    ${establecimiento ? `<div class="fieldnote" style="margin-bottom:10px;">Establecimiento: ${escapeHtml(establecimiento.nombre)}${cliente.establecimientos.length>1?` · <a href="#" style="color:var(--teal)" onclick="clienteEstablecimientoContexto=null; render(); return false;">cambiar</a>`:''}</div>` : ''}
+    ${!cliente ? `<div class="fieldnote" style="margin-bottom:10px;">Podés continuar así si todavía no tenés los datos del cliente, o <a href="#" style="color:var(--teal)" onclick="navigate('clienteBuscar'); return false;">elegir un cliente</a>.</div>` : ''}
+    <div class="sectiontitle">Elegí la especie</div>
+    <div class="speciesgrid">
+      <div class="speciesbtn" onclick="iniciarEquino()"><span class="emoji">🐎</span><span class="lab">Equino</span></div>
+      <div class="speciesbtn" onclick="iniciarBovino()"><span class="emoji">🐄</span><span class="lab">Bovino</span></div>
+      <div class="speciesbtn" onclick="iniciarCanino()"><span class="emoji">🐕</span><span class="lab">Canino</span></div>
+      <div class="speciesbtn" onclick="iniciarFelino()"><span class="emoji">🐈</span><span class="lab">Felino</span></div>
+      <div class="speciesbtn" onclick="iniciarOtrosEspecie()"><span class="emoji">🐾</span><span class="lab">Otros</span></div>
+    </div>
+  `;
+}
+function viewEspecieElegirEstablecimiento(cliente){
+  return `
+    <div class="sectiontitle">Cliente: ${escapeHtml(clienteNombreCompleto(cliente))}</div>
+    <div class="sectiontitle">¿En qué establecimiento estás trabajando?</div>
+    <div class="sublist">
+      ${cliente.establecimientos.map(e=>`
+        <div class="subtile" onclick="clienteEstablecimientoContexto='${e.id}'; render()">
+          <span>${escapeHtml(e.nombre)}${e.renspa?' · RENSPA '+escapeHtml(e.renspa):''}</span>
+        </div>`).join('')}
+    </div>
+  `;
+}
+function proximamente(){ showToast('Esta especie la definimos en el próximo paso'); }
+function iniciarEquino(){
+  trabajoActual = {
+    id: null, clienteId: clienteContexto, establecimientoId: clienteEstablecimientoContexto, especie:'Equino', estado:'parcial', fechaInicio: hoyISO(),
+    facturado:false, cobrado:false,
+    datosPaciente: {}, exploracionClinica:{examenClinico:{}}, exploracionReproductiva:{},
+    examenesComplementarios:{sangradoMasivo:{tubos:[], observaciones:''}},
+    procedimientosQuirurgicos:{}, tratamiento:{texto:'',fotos:[]}, sanidad:{sanidadMasiva:{filas:[]}}, otroProcedimiento:{texto:'',fotos:[]}
+  };
+  navigate('equinoCategorias');
+}
+function iniciarBovino(){
+  trabajoActual = {
+    id: null, clienteId: clienteContexto, establecimientoId: clienteEstablecimientoContexto, especie:'Bovino', estado:'parcial', fechaInicio: hoyISO(),
+    facturado:false, cobrado:false,
+    registro: {caravana:''}, exploracionClinica:{examenClinico:{}},
+    exploracionReproductiva: {
+      diagnosticoGestacion:{registros:[], comentario:''},
+      preservicio:{registros:[]},
+      servicio:{iatf:[], natural:''},
+      examenGinecologico:{registros:[]},
+      observacion:''
+    },
+    examenAndrologico: {},
+    examenesComplementarios: {datosAnimal:{caravana:''}, sangradoMasivo:{tubos:[], observaciones:''}},
+    procedimientosQuirurgicos: {},
+    tratamiento: {individual:{texto:'',fotos:[]}, masivo:{filas:[], observaciones:''}},
+    sanidad: {individual:{vacunacion:{texto:'',fotos:[]},desparasitacion:{texto:'',fotos:[]},otra:{texto:'',fotos:[]}}, masivo:{vacunacion:{filas:[],observaciones:''}, desparasitacion:{filas:[],observaciones:''}, otra:{filas:[],observaciones:''}}},
+    otroProcedimiento: {texto:'', fotos:[]}
+  };
+  navigate('bovinoCategorias');
+}
+function retomarTrabajo(id){
+  const t = trabajos.find(x=>x.id===id);
+  if(!t) return;
+  trabajoActual = JSON.parse(JSON.stringify(t));
+  const prefix = especiePrefix();
+  navigate(prefix==='mascota' ? 'mascotaCategorias' : prefix+'Categorias');
+}
+function especiePrefix(){
+  if(trabajoActual.especie==='Bovino') return 'bovino';
+  if(trabajoActual.especie==='Equino') return 'equino';
+  return 'mascota';
+}
+function emojiEspecie(e){ return e==='Canino'?'🐕':e==='Felino'?'🐈':e==='Equino'?'🐎':e==='Bovino'?'🐄':'🐾'; }
+
+function guardarTrabajoActual(estadoFinal){
+  if(!trabajoActual.id) trabajoActual.id = uid();
+  trabajoActual.estado = estadoFinal;
+  const idx = trabajos.findIndex(t=>t.id===trabajoActual.id);
+  const copia = JSON.parse(JSON.stringify(trabajoActual));
+  if(idx>=0) trabajos[idx]=copia; else trabajos.push(copia);
+  saveTrabajoDoc(copia);
+}
+
+// ================= EQUINO: CATEGORÍAS =================
+function hasData(obj){
+  if(!obj) return false;
+  if(typeof obj === 'string') return obj.trim().length>0;
+  if(Array.isArray(obj)) return obj.length>0;
+  if(typeof obj === 'object') return Object.values(obj).some(v=>hasData(v));
+  return !!obj;
+}
+function viewEquinoCategorias(){
+  const t = trabajoActual;
+  const cats = [
+    {id:'paciente', emoji:'🐴', lab:'Datos del paciente', has: hasData(t.datosPaciente)},
+    {id:'clinica', emoji:'🩺', lab:'Exploración clínica', has: hasData(t.exploracionClinica)},
+    {id:'reproductiva', emoji:'🧬', lab:'Exploración reproductiva', has: hasData(t.exploracionReproductiva)},
+    {id:'complementarios', emoji:'🔬', lab:'Exámenes complementarios', has: hasData(t.examenesComplementarios)},
+    {id:'quirurgicos', emoji:'🔪', lab:'Procedimientos quirúrgicos', has: hasData(t.procedimientosQuirurgicos)},
+    {id:'tratamiento', emoji:'💉', lab:'Tratamiento', has: hasData(t.tratamiento)},
+    {id:'sanidad', emoji:'💉', lab:'Sanidad', has: hasData(t.sanidad)},
+    {id:'otro', emoji:'➕', lab:'Otro procedimiento', has: hasData(t.otroProcedimiento)},
+  ];
+  return `
+    <button class="backbtn" onclick="salirDeTrabajo()">‹ Salir sin continuar</button>
+    <div class="statusbar">
+      <span>🐎 Equino ${t.clienteId ? '· '+escapeHtml(clienteNombreCompleto(clienteById(t.clienteId)||{})) : '· sin cliente'}</span>
+      <span class="tag ${t.estado==='finalizado'?'finalizado':'parcial'}">${t.estado==='finalizado'?'Finalizado':'En curso'}</span>
+    </div>
+    <div class="catlist">
+      ${cats.map(c=>`
+        <div class="cattile" onclick="navigate('equino-${c.id}')">
+          <div class="left"><span class="emoji">${c.emoji}</span><span class="lab">${c.lab}</span></div>
+          ${c.has ? '<span class="check">✓</span>' : ''}
+        </div>`).join('')}
+    </div>
+  `;
+}
+function salirDeTrabajo(){
+  if(hasData(trabajoActual.datosPaciente)||hasData(trabajoActual.exploracionClinica)||hasData(trabajoActual.tratamiento)){
+    if(!confirm('Tenés datos sin guardar en este trabajo. ¿Salir de todas formas?')) return;
+  }
+  trabajoActual = null;
+  navigate('home');
+}
+
+// ================= EQUINO: DETALLE POR CATEGORÍA =================
+function viewEquinoCategoria(cat){
+  if(cat==='paciente') return catPaciente();
+  if(cat==='clinica') return catClinica();
+  if(cat==='reproductiva') return catReproductiva();
+  if(cat==='complementarios') return catComplementarios();
+  if(cat==='quirurgicos') return catQuirurgicos();
+  if(cat==='tratamiento') return catTratamiento();
+  if(cat==='sanidad') return catSanidad();
+  if(cat==='otro') return catOtro();
+  return '';
+}
+function botonesGuardar(saveFn, cancelFnName){
+  const cancel = cancelFnName || 'cancelarCategorias';
+  return `
+    <div style="margin-top:22px; display:flex; flex-direction:column; gap:10px;">
+      <button class="btn btn-amber" onclick="confirmarAccionGuardado('${saveFn}','parcial','${cancel}')">Guardar informe parcial</button>
+      <button class="btn btn-green" onclick="confirmarAccionGuardado('${saveFn}','finalizado','${cancel}')">Guardar y finalizar</button>
+      <button class="btn btn-danger" onclick="confirmarAccionGuardado('${saveFn}','salir','${cancel}')">Salir sin guardar</button>
+    </div>`;
+}
+function confirmarAccionGuardado(fnName, accion, cancelFnName){
+  const mensajes = {
+    parcial: '¿Guardar este informe como parcial? Vas a poder seguir editándolo después.',
+    finalizado: '¿Confirmás que finalizaste? Se va a cerrar este trabajo.',
+    salir: '¿Salir sin guardar los cambios de esta pantalla?'
+  };
+  if(!confirm(mensajes[accion])) return;
+  if(accion==='salir'){
+    window[cancelFnName]();
+  } else {
+    window[fnName](accion);
+  }
+}
+function cancelarCategorias(){ navigate(especiePrefix()+'Categorias'); }
+function cancelarMascotaProc(){ mascotaProcActivo=null; render(); }
+function volverACategorias(){ navigate(especiePrefix()+'Categorias'); }
+
+// --- Datos del paciente ---
+function catPaciente(){
+  const p = trabajoActual.datosPaciente || {};
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Datos del paciente</div>
+    <label>Nombre del animal</label>
+    <input type="text" id="p_nombre" value="${escapeHtml(p.nombre||'')}">
+    <label>Pelaje</label>
+    <input type="text" id="p_pelaje" value="${escapeHtml(p.pelaje||'')}">
+    <label>Edad</label>
+    <input type="text" id="p_edad" value="${escapeHtml(p.edad||'')}">
+    <label>Sexo</label>
+    <select id="p_sexo">
+      ${['','Macho','Hembra','Castrado'].map(s=>`<option ${p.sexo===s?'selected':''}>${s}</option>`).join('')}
+    </select>
+    ${botonesGuardar('guardarPaciente')}
+  `;
+}
+function guardarPaciente(estado){
+  trabajoActual.datosPaciente = {
+    nombre: document.getElementById('p_nombre').value.trim(),
+    pelaje: document.getElementById('p_pelaje').value.trim(),
+    edad: document.getElementById('p_edad').value.trim(),
+    sexo: document.getElementById('p_sexo').value,
+  };
+  finalizarGuardado(estado);
+}
+function finalizarGuardado(estado){
+  const prefix = especiePrefix();
+  guardarTrabajoActual(estado);
+  showToast(estado==='finalizado' ? 'Trabajo finalizado' : 'Guardado parcialmente');
+  if(estado==='finalizado'){ trabajoActual=null; navigate('home'); }
+  else navigate(prefix+'Categorias');
+}
+
+// --- Exploración clínica ---
+let examenClinicoSistemaActivo = null;
+function catClinica(){
+  const e = trabajoActual.exploracionClinica || {examenClinico:{}};
+  if(examenClinicoSistemaActivo){
+    const dato = (e.examenClinico||{})[examenClinicoSistemaActivo] || {texto:'', fotos:[]};
+    return `
+      <button class="backbtn" onclick="examenClinicoSistemaActivo=null; navigate(especiePrefix()+'-clinica')">‹ Exploración clínica</button>
+      <div class="sectiontitle">${examenClinicoSistemaActivo}</div>
+      <label>Maniobras realizadas / hallazgos / tratamiento indicado</label>
+      <textarea id="ec_texto" placeholder="Escribí lo que hiciste o encontraste...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['exploracionClinica','examenClinico',examenClinicoSistemaActivo])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSistemaClinico()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Estado general</div>
+    <div class="optrow">
+      ${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${e.estadoGeneral===o?'selected':''}" onclick="setClinica('estadoGeneral','${o}')">${o}</div>`).join('')}
+    </div>
+    <div class="sectiontitle">Condición corporal</div>
+    <div class="optrow">
+      ${['Regular','Buena','Mala'].map(o=>`<div class="optbtn ${e.condicionCorporal===o?'selected':''}" onclick="setClinica('condicionCorporal','${o}')">${o}</div>`).join('')}
+    </div>
+    <div class="sectiontitle">Examen clínico por sistema</div>
+    <div class="sublist">
+      ${SISTEMAS.map(s=>`
+        <div class="subtile" onclick="examenClinicoSistemaActivo='${s}'; navigate(especiePrefix()+'-clinica')">
+          <span>${iconoSistema(s)} ${s}</span>${hasData((e.examenClinico||{})[s]) ? '<span class="check">✓</span>' : ''}
+        </div>`).join('')}
+    </div>
+    ${botonesGuardar('guardarClinicaFinal')}
+  `;
+}
+function setClinica(campo, valor){
+  if(!trabajoActual.exploracionClinica) trabajoActual.exploracionClinica = {examenClinico:{}};
+  trabajoActual.exploracionClinica[campo] = valor;
+  render();
+}
+function guardarSistemaClinico(){
+  if(!trabajoActual.exploracionClinica.examenClinico) trabajoActual.exploracionClinica.examenClinico = {};
+  const actual = trabajoActual.exploracionClinica.examenClinico[examenClinicoSistemaActivo] || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('ec_texto').value.trim();
+  trabajoActual.exploracionClinica.examenClinico[examenClinicoSistemaActivo] = actual;
+  examenClinicoSistemaActivo = null;
+  navigate('equino-clinica');
+}
+function guardarClinicaFinal(estado){ finalizarGuardado(estado); }
+
+// --- Exploración reproductiva ---
+function catReproductiva(){
+  const r = trabajoActual.exploracionReproductiva || {};
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Estado gestacional</div>
+    <div class="optrow">
+      ${['Preñada','Vacía'].map(o=>`<div class="optbtn ${r.estadoGestacional===o?'selected':''}" onclick="setRepro('${o}')">${o}</div>`).join('')}
+    </div>
+    ${r.estadoGestacional==='Vacía' ? `
+      <label>Observaciones</label>
+      <textarea id="r_obs" placeholder="Motivo u observación...">${escapeHtml(r.observaciones||'')}</textarea>` : ''}
+    ${r.estadoGestacional==='Preñada' ? `
+      <label>Edad gestacional estimada</label>
+      <input type="text" id="r_edadGestacional" value="${escapeHtml(r.edadGestacional||'')}" placeholder="Ej: 5 meses">` : ''}
+    <label>Examen reproductivo</label>
+    <textarea id="r_examen" placeholder="Lo que encontrás o evaluás...">${escapeHtml(r.examenReproductivo||'')}</textarea>
+    ${botonesGuardar('guardarRepro')}
+  `;
+}
+function setRepro(valor){
+  if(!trabajoActual.exploracionReproductiva) trabajoActual.exploracionReproductiva = {};
+  trabajoActual.exploracionReproductiva.estadoGestacional = valor;
+  render();
+}
+function guardarRepro(estado){
+  const r = trabajoActual.exploracionReproductiva || {};
+  if(r.estadoGestacional==='Vacía') r.observaciones = document.getElementById('r_obs').value.trim();
+  if(r.estadoGestacional==='Preñada') r.edadGestacional = document.getElementById('r_edadGestacional').value.trim();
+  r.examenReproductivo = document.getElementById('r_examen').value.trim();
+  trabajoActual.exploracionReproductiva = r;
+  finalizarGuardado(estado);
+}
+
+// --- Exámenes complementarios ---
+let complementarioActivo = null;
+function catComplementarios(){
+  const ex = trabajoActual.examenesComplementarios || {sangradoMasivo:{tubos:[],observaciones:''}};
+  if(complementarioActivo==='sangradoMasivo'){
+    const sm = ex.sangradoMasivo || {tubos:[], observaciones:''};
+    window._tubosTmp = sm.tubos && sm.tubos.length ? JSON.parse(JSON.stringify(sm.tubos)) : [{nombre:'',edad:'',pelaje:'',sexo:''}];
+    return `
+      <button class="backbtn" onclick="complementarioActivo=null; navigate('equino-complementarios')">‹ Exámenes complementarios</button>
+      <div class="sectiontitle">Análisis de sangre grupal</div>
+      <div id="tubosList"></div>
+      <button type="button" class="addanimalbtn" onclick="agregarTubo()">+ Agregar animal</button>
+      <label>Observaciones</label>
+      <textarea id="sm_obs" placeholder="Para qué se solicitó...">${escapeHtml(sm.observaciones||'')}</textarea>
+      <button class="btn btn-teal" onclick="guardarSangradoMasivo()">Listo, volver</button>
+    `;
+  }
+  if(complementarioActivo && complementarioActivo!=='sangradoMasivo'){
+    const labels = {radiografia:'Radiografía', ecografia:'Ecografía', sangrado:'Análisis de sangre', otros:'Otros'};
+    const dato = ex[complementarioActivo] || {texto:'', fotos:[]};
+    return `
+      <button class="backbtn" onclick="complementarioActivo=null; navigate('equino-complementarios')">‹ Exámenes complementarios</button>
+      <div class="sectiontitle">${labels[complementarioActivo]}</div>
+      <textarea id="cx_texto" placeholder="Qué indicaste, solicitaste o hiciste...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['examenesComplementarios',complementarioActivo])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarComplementarioSimple()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Exámenes complementarios</div>
+    <div class="sublist">
+      <div class="subtile" onclick="complementarioActivo='radiografia'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.radiografia} Radiografía</span>${hasData(ex.radiografia)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivo='ecografia'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.ecografia} Ecografía</span>${hasData(ex.ecografia)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivo='sangrado'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.sangrado} Análisis de sangre</span>${hasData(ex.sangrado)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivo='sangradoMasivo'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.sangradoMasivo} Análisis de sangre grupal</span>${(ex.sangradoMasivo&&ex.sangradoMasivo.tubos&&ex.sangradoMasivo.tubos.length)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivo='otros'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.otros} Otros</span>${hasData(ex.otros)?'<span class="check">✓</span>':''}</div>
+    </div>
+    ${botonesGuardar('guardarComplementariosFinal')}
+  `;
+}
+function guardarComplementarioSimple(){
+  if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios = {sangradoMasivo:{tubos:[],observaciones:''}};
+  const actual = trabajoActual.examenesComplementarios[complementarioActivo] || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('cx_texto').value.trim();
+  trabajoActual.examenesComplementarios[complementarioActivo] = actual;
+  complementarioActivo = null;
+  navigate('equino-complementarios');
+}
+function renderTubosList(){
+  const el = document.getElementById('tubosList'); if(!el) return;
+  el.innerHTML = window._tubosTmp.map((t,i)=>`
+    <div class="animalrow">
+      <span class="tubolab">N°${i+1}</span>
+      <input type="text" placeholder="Nombre" value="${escapeHtml(t.nombre)}" onchange="window._tubosTmp[${i}].nombre=this.value">
+      <input type="text" placeholder="Edad" value="${escapeHtml(t.edad)}" onchange="window._tubosTmp[${i}].edad=this.value">
+      <input type="text" placeholder="Pelaje" value="${escapeHtml(t.pelaje)}" onchange="window._tubosTmp[${i}].pelaje=this.value">
+      <input type="text" placeholder="Sexo" value="${escapeHtml(t.sexo)}" onchange="window._tubosTmp[${i}].sexo=this.value">
+      ${window._tubosTmp.length>1 ? `<button class="removeanimal" onclick="quitarTubo(${i})">✕</button>` : ''}
+    </div>`).join('');
+}
+function agregarTubo(){ window._tubosTmp.push({nombre:'',edad:'',pelaje:'',sexo:''}); renderTubosList(); }
+function quitarTubo(i){ window._tubosTmp.splice(i,1); renderTubosList(); }
+function guardarSangradoMasivo(){
+  if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios = {};
+  trabajoActual.examenesComplementarios.sangradoMasivo = {
+    tubos: window._tubosTmp,
+    observaciones: document.getElementById('sm_obs').value.trim(),
+  };
+  complementarioActivo = null;
+  navigate('equino-complementarios');
+}
+function guardarComplementariosFinal(estado){ finalizarGuardado(estado); }
+
+// --- Procedimientos quirúrgicos ---
+let sistemaQuirurgicoActivo = null;
+function catQuirurgicos(){
+  const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(sistemaQuirurgicoActivo){
+    const dato = q[sistemaQuirurgicoActivo] || {texto:'', fotos:[]};
+    return `
+      <button class="backbtn" onclick="sistemaQuirurgicoActivo=null; navigate('equino-quirurgicos')">‹ Procedimientos quirúrgicos</button>
+      <div class="sectiontitle">${sistemaQuirurgicoActivo}</div>
+      <label>Qué hiciste / indicaste</label>
+      <textarea id="q_texto" placeholder="Describí el procedimiento...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['procedimientosQuirurgicos',sistemaQuirurgicoActivo])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSistemaQuirurgico()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Sistema a intervenir</div>
+    <div class="sublist">
+      ${SISTEMAS.map(s=>`
+        <div class="subtile" onclick="sistemaQuirurgicoActivo='${s}'; navigate('equino-quirurgicos')">
+          <span>${iconoSistema(s)} ${s}</span>${hasData(q[s]) ? '<span class="check">✓</span>' : ''}
+        </div>`).join('')}
+    </div>
+    ${botonesGuardar('guardarQuirurgicosFinal')}
+  `;
+}
+function guardarSistemaQuirurgico(){
+  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos = {};
+  const actual = trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivo] || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('q_texto').value.trim();
+  trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivo] = actual;
+  sistemaQuirurgicoActivo = null;
+  navigate('equino-quirurgicos');
+}
+function guardarQuirurgicosFinal(estado){ finalizarGuardado(estado); }
+
+// --- Tratamiento ---
+function catTratamiento(){
+  const dato = trabajoActual.tratamiento || {texto:'', fotos:[]};
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Tratamiento</div>
+    <textarea id="tr_texto" placeholder="Qué se aplicó, para qué, cuándo toca repetir...">${escapeHtml(dato.texto||'')}</textarea>
+    ${fotosBlock(dato.fotos, ['tratamiento'])}
+    ${botonesGuardar('guardarTratamiento')}
+  `;
+}
+function guardarTratamiento(estado){
+  const actual = trabajoActual.tratamiento || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('tr_texto').value.trim();
+  trabajoActual.tratamiento = actual;
+  finalizarGuardado(estado);
+}
+
+// --- Sanidad ---
+let sanidadMasivaActiva = false;
+function catSanidad(){
+  const s = trabajoActual.sanidad || {sanidadMasiva:{filas:[]}};
+  if(sanidadMasivaActiva){
+    window._sanidadFilasTmp = (s.sanidadMasiva && s.sanidadMasiva.filas && s.sanidadMasiva.filas.length) ? JSON.parse(JSON.stringify(s.sanidadMasiva.filas)) : [{tipoVacuna:'',nombre:'',edad:'',pelaje:'',sexo:''}];
+    return `
+      <button class="backbtn" onclick="sanidadMasivaActiva=false; navigate('equino-sanidad')">‹ Sanidad</button>
+      <div class="sectiontitle">Sanidad masiva</div>
+      <div id="sanidadFilasList"></div>
+      <button type="button" class="addanimalbtn" onclick="agregarFilaSanidad()">+ Agregar animal</button>
+      <button class="btn btn-teal" onclick="guardarSanidadMasiva()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Vacunación / análisis</div>
+    ${VACUNAS.map(v=>{
+      const dato = (s[v.key]) || null;
+      return `<div class="vacrow">
+        <div class="top">
+          <span class="lab">${v.label}</span>
+          <button class="vacbtn ${dato?'done':''}" onclick="marcarVacuna('${v.key}')">${dato?'Aplicada hoy ✓':'Marcar aplicada hoy'}</button>
+        </div>
+        ${dato ? `<div class="prox">Próxim${v.tipo==='vacuna'?'a vacunación':'o análisis'}: ${fmtFecha(dato.proxima)}</div>` : ''}
+        <textarea placeholder="Observaciones (opcional): ej. completó el esquema, la próxima ya es anual..." style="margin-top:8px; min-height:50px;" onchange="actualizarObsVacuna('${v.key}', this.value)">${escapeHtml((dato&&dato.observaciones)||'')}</textarea>
+      </div>`;
+    }).join('')}
+    <div class="sectiontitle">Sanidad masiva</div>
+    <div class="listcard" onclick="sanidadMasivaActiva=true; navigate('equino-sanidad')">
+      <div class="meta">${(s.sanidadMasiva&&s.sanidadMasiva.filas&&s.sanidadMasiva.filas.length) ? s.sanidadMasiva.filas.length+' animales cargados' : 'Cargar animales vacunados en lote'}</div>
+    </div>
+    ${botonesGuardar('guardarSanidadFinal')}
+  `;
+}
+function actualizarObsVacuna(key, valor){
+  if(!trabajoActual.sanidad) trabajoActual.sanidad = {sanidadMasiva:{filas:[]}};
+  if(!trabajoActual.sanidad[key]) trabajoActual.sanidad[key] = {fecha:null, proxima:null};
+  trabajoActual.sanidad[key].observaciones = valor;
+}
+function marcarVacuna(key){
+  const v = VACUNAS.find(x=>x.key===key);
+  if(!trabajoActual.sanidad) trabajoActual.sanidad = {sanidadMasiva:{filas:[]}};
+  const hoy = hoyISO();
+  const previo = trabajoActual.sanidad[key] || {};
+  trabajoActual.sanidad[key] = {fecha: hoy, proxima: sumarDias(hoy, v.dias), observaciones: previo.observaciones||''};
+  render();
+}
+function renderSanidadFilas(){
+  const el = document.getElementById('sanidadFilasList'); if(!el) return;
+  el.innerHTML = window._sanidadFilasTmp.map((f,i)=>`
+    <div class="animalrow">
+      <select onchange="window._sanidadFilasTmp[${i}].tipoVacuna=this.value">
+        <option value="">Tipo</option>
+        ${VACUNAS.map(v=>`<option ${f.tipoVacuna===v.label?'selected':''}>${v.label}</option>`).join('')}
+      </select>
+      <input type="text" placeholder="Nombre" value="${escapeHtml(f.nombre)}" onchange="window._sanidadFilasTmp[${i}].nombre=this.value">
+      <input type="text" placeholder="Edad" value="${escapeHtml(f.edad)}" onchange="window._sanidadFilasTmp[${i}].edad=this.value">
+      ${window._sanidadFilasTmp.length>1 ? `<button class="removeanimal" onclick="quitarFilaSanidad(${i})">✕</button>` : ''}
+    </div>`).join('');
+}
+function agregarFilaSanidad(){ window._sanidadFilasTmp.push({tipoVacuna:'',nombre:'',edad:'',pelaje:'',sexo:''}); renderSanidadFilas(); }
+function quitarFilaSanidad(i){ window._sanidadFilasTmp.splice(i,1); renderSanidadFilas(); }
+function guardarSanidadMasiva(){
+  if(!trabajoActual.sanidad) trabajoActual.sanidad = {};
+  trabajoActual.sanidad.sanidadMasiva = {filas: window._sanidadFilasTmp};
+  sanidadMasivaActiva = false;
+  navigate('equino-sanidad');
+}
+function guardarSanidadFinal(estado){ finalizarGuardado(estado); }
+
+// --- Otro procedimiento ---
+function catOtro(){
+  const dato = trabajoActual.otroProcedimiento || {texto:'', fotos:[]};
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Otro procedimiento</div>
+    <textarea id="otro_texto" placeholder="Algo esporádico que no entra en las demás categorías...">${escapeHtml(dato.texto||'')}</textarea>
+    ${fotosBlock(dato.fotos, ['otroProcedimiento'])}
+    ${botonesGuardar('guardarOtro')}
+  `;
+}
+function guardarOtro(estado){
+  const actual = trabajoActual.otroProcedimiento || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('otro_texto').value.trim();
+  trabajoActual.otroProcedimiento = actual;
+  finalizarGuardado(estado);
+}
+
+// ================= BOVINO: CATEGORÍAS =================
+let bovinoReproSub = null, bovinoServicioSub = null, complementarioActivoBovino = null,
+    sistemaQuirurgicoActivoBovino = null, tratamientoModoBovino = null, sanidadModoBovino = null, sanidadTipoBovino = null;
+
+function viewBovinoCategorias(){
+  const t = trabajoActual;
+  const cats = [
+    {id:'registro', emoji:'🏷️', lab:'Registro', has: hasData(t.registro)},
+    {id:'clinica', emoji:'🩺', lab:'Exploración clínica', has: hasData(t.exploracionClinica)},
+    {id:'reproductiva', emoji:'🧬', lab:'Exploración reproductiva', has: hasData(t.exploracionReproductiva)},
+    {id:'andrologico', emoji:'🐂', lab:'Examen andrológico', has: hasData(t.examenAndrologico)},
+    {id:'complementarios', emoji:'🔬', lab:'Exámenes complementarios', has: hasData(t.examenesComplementarios)},
+    {id:'quirurgicos', emoji:'🔪', lab:'Procedimientos quirúrgicos', has: hasData(t.procedimientosQuirurgicos)},
+    {id:'tratamiento', emoji:'💉', lab:'Tratamiento', has: hasData(t.tratamiento)},
+    {id:'sanidad', emoji:'💉', lab:'Sanidad', has: hasData(t.sanidad)},
+    {id:'otro', emoji:'➕', lab:'Otro procedimiento', has: hasData(t.otroProcedimiento)},
+  ];
+  return `
+    <button class="backbtn" onclick="salirDeTrabajo()">‹ Salir sin continuar</button>
+    <div class="statusbar">
+      <span>🐄 Bovino ${t.clienteId ? '· '+escapeHtml(clienteNombreCompleto(clienteById(t.clienteId)||{})) : '· sin cliente'}</span>
+      <span class="tag ${t.estado==='finalizado'?'finalizado':'parcial'}">${t.estado==='finalizado'?'Finalizado':'En curso'}</span>
+    </div>
+    <div class="catlist">
+      ${cats.map(c=>`
+        <div class="cattile" onclick="navigate('bovino-${c.id}')">
+          <div class="left"><span class="emoji">${c.emoji}</span><span class="lab">${c.lab}</span></div>
+          ${c.has ? '<span class="check">✓</span>' : ''}
+        </div>`).join('')}
+    </div>
+  `;
+}
+function viewBovinoCategoria(cat){
+  if(cat==='registro') return catRegistro();
+  if(cat==='clinica') return catClinica();
+  if(cat==='reproductiva') return catReproductivaBovino();
+  if(cat==='andrologico') return catAndrologico();
+  if(cat==='complementarios') return catComplementariosBovino();
+  if(cat==='quirurgicos') return catQuirurgicosBovino();
+  if(cat==='tratamiento') return catTratamientoBovino();
+  if(cat==='sanidad') return catSanidadBovino();
+  if(cat==='otro') return catOtro();
+  return '';
+}
+
+// --- Registro ---
+function catRegistro(){
+  const r = trabajoActual.registro || {caravana:''};
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Registro</div>
+    <label>Caravana</label>
+    <input type="text" id="reg_caravana" value="${escapeHtml(r.caravana||'')}" placeholder="N° de caravana">
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="showToast('El escaneo con bastón lector se suma más adelante')">📡 Escanear chip (próximamente)</button>
+    ${botonesGuardar('guardarRegistro')}
+  `;
+}
+function guardarRegistro(estado){
+  trabajoActual.registro = {caravana: document.getElementById('reg_caravana').value.trim()};
+  finalizarGuardado(estado);
+}
+
+// --- Exploración reproductiva (Bovino) ---
+function catReproductivaBovino(){
+  const r = trabajoActual.exploracionReproductiva;
+  if(bovinoReproSub==='diagnostico') return subDiagnosticoGestacion(r);
+  if(bovinoReproSub==='preservicio') return subPreservicio(r);
+  if(bovinoReproSub==='servicio') return subServicio(r);
+  if(bovinoReproSub==='ginecologico') return subExamenGinecologico(r);
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Exploración reproductiva</div>
+    <div class="sublist">
+      <div class="subtile" onclick="bovinoReproSub='diagnostico'; render()"><span>Diagnóstico de gestación</span>${r.diagnosticoGestacion.registros.length?`<span class="check">✓ (${r.diagnosticoGestacion.registros.length})</span>`:''}</div>
+      <div class="subtile" onclick="bovinoReproSub='preservicio'; render()"><span>Preservicio</span>${r.preservicio.registros.length?`<span class="check">✓ (${r.preservicio.registros.length})</span>`:''}</div>
+      <div class="subtile" onclick="bovinoReproSub='servicio'; render()"><span>Servicio</span>${(r.servicio.iatf.length||r.servicio.natural)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="bovinoReproSub='ginecologico'; render()"><span>Examen ginecológico</span>${r.examenGinecologico.registros.length?'<span class="check">✓</span>':''}</div>
+    </div>
+    <label>Observación general</label>
+    <textarea id="repro_obs" placeholder="Comentario general sobre la exploración reproductiva...">${escapeHtml(r.observacion||'')}</textarea>
+    ${botonesGuardar('guardarReproductivaBovinoFinal')}
+  `;
+}
+function guardarReproductivaBovinoFinal(estado){
+  trabajoActual.exploracionReproductiva.observacion = document.getElementById('repro_obs').value.trim();
+  finalizarGuardado(estado);
+}
+
+function subDiagnosticoGestacion(r){
+  if(!window._diagTmp) window._diagTmp = {caravana:'', resultado:null, subresultado:null, otro:''};
+  const d = window._diagTmp;
+  const regs = r.diagnosticoGestacion.registros;
+  const prenadas = regs.filter(x=>x.resultado==='Preñada').length;
+  const vacias = regs.filter(x=>x.resultado==='Vacía').length;
+  const cab = regs.filter(x=>x.subresultado==='Cabeza').length;
+  const cue = regs.filter(x=>x.subresultado==='Cuerpo').length;
+  const col = regs.filter(x=>x.subresultado==='Cola').length;
+  return `
+    <button class="backbtn" onclick="bovinoReproSub=null; render()">‹ Exploración reproductiva</button>
+    <div class="sectiontitle">Diagnóstico de gestación</div>
+    <div class="statsrow" style="margin-bottom:14px;">
+      <div class="statcard"><div class="num">${regs.length}</div><div class="lab">evaluadas</div></div>
+      <div class="statcard"><div class="num">${prenadas}</div><div class="lab">preñadas</div></div>
+      <div class="statcard"><div class="num">${vacias}</div><div class="lab">vacías</div></div>
+    </div>
+    ${prenadas ? `<div class="fieldnote" style="margin-bottom:12px;">De las preñadas: Cabeza ${cab} · Cuerpo ${cue} · Cola ${col}</div>` : ''}
+    <label>Caravana</label>
+    <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._diagTmp.caravana=this.value" placeholder="N° de caravana">
+    <div class="sectiontitle">Resultado</div>
+    <div class="optrow">
+      ${['Preñada','Vacía'].map(o=>`<div class="optbtn ${d.resultado===o?'selected':''}" onclick="setDiagResultado('${o}')">${o}</div>`).join('')}
+    </div>
+    ${d.resultado==='Preñada' ? `
+      <div class="optrow">
+        ${['Cabeza','Cuerpo','Cola'].map(o=>`<div class="optbtn ${d.subresultado===o?'selected':''}" onclick="window._diagTmp.subresultado='${o}'; render()">${o}</div>`).join('')}
+      </div>` : ''}
+    <label>Otro (opcional)</label>
+    <input type="text" value="${escapeHtml(d.otro)}" oninput="window._diagTmp.otro=this.value" placeholder="Algún detalle extra">
+    <button class="btn btn-green" onclick="agregarDiagRegistro()">+ Agregar y siguiente animal</button>
+    <label style="margin-top:22px;">Comentario general</label>
+    <textarea id="dg_comentario" placeholder="Ej: examen hecho por ultrasonografía...">${escapeHtml(r.diagnosticoGestacion.comentario||'')}</textarea>
+    ${botonesGuardar('guardarDiagGestacionFinal')}
+  `;
+}
+function setDiagResultado(v){ window._diagTmp.resultado=v; if(v==='Vacía') window._diagTmp.subresultado=null; render(); }
+function agregarDiagRegistro(){
+  const d = window._diagTmp;
+  if(!d.caravana || !d.resultado){ showToast('Falta caravana o resultado'); return; }
+  trabajoActual.exploracionReproductiva.diagnosticoGestacion.registros.push({...d});
+  window._diagTmp = {caravana:'', resultado:null, subresultado:null, otro:''};
+  render();
+}
+function guardarDiagGestacionFinal(estado){
+  trabajoActual.exploracionReproductiva.diagnosticoGestacion.comentario = document.getElementById('dg_comentario').value.trim();
+  finalizarGuardado(estado);
+}
+
+function subPreservicio(r){
+  if(!window._presTmp) window._presTmp = {caravana:'', gdr:null, destino:null, destinoOtro:''};
+  const p = window._presTmp;
+  const regs = r.preservicio.registros;
+  return `
+    <button class="backbtn" onclick="bovinoReproSub=null; render()">‹ Exploración reproductiva</button>
+    <div class="sectiontitle">Preservicio (${regs.length} cargados)</div>
+    <label>Caravana</label>
+    <input type="text" value="${escapeHtml(p.caravana)}" oninput="window._presTmp.caravana=this.value" placeholder="N° de caravana">
+    <div class="sectiontitle">GDR (Grado de Desarrollo Reproductivo)</div>
+    <div class="optrow">
+      ${[1,2,3,4].map(n=>`<div class="optbtn ${p.gdr===n?'selected':''}" onclick="window._presTmp.gdr=${n}; render()">${n}</div>`).join('')}
+    </div>
+    <div class="sectiontitle">Destino</div>
+    <div class="optrow">
+      ${['IATF','Servicio natural','Otra'].map(o=>`<div class="optbtn ${p.destino===o?'selected':''}" onclick="window._presTmp.destino='${o}'; render()">${o}</div>`).join('')}
+    </div>
+    ${p.destino==='Otra' ? `<label>¿A dónde?</label><input type="text" value="${escapeHtml(p.destinoOtro)}" oninput="window._presTmp.destinoOtro=this.value">` : ''}
+    <button class="btn btn-green" onclick="agregarPresRegistro()">+ Agregar y siguiente animal</button>
+    ${botonesGuardar('guardarPreservicioFinal')}
+  `;
+}
+function agregarPresRegistro(){
+  const p = window._presTmp;
+  if(!p.caravana || !p.gdr || !p.destino){ showToast('Completá caravana, GDR y destino'); return; }
+  trabajoActual.exploracionReproductiva.preservicio.registros.push({...p});
+  window._presTmp = {caravana:'', gdr:null, destino:null, destinoOtro:''};
+  render();
+}
+function guardarPreservicioFinal(estado){ finalizarGuardado(estado); }
+
+function subServicio(r){
+  if(bovinoServicioSub==='iatf') return subServicioIatf(r);
+  if(bovinoServicioSub==='natural') return subServicioNatural(r);
+  return `
+    <button class="backbtn" onclick="bovinoReproSub=null; render()">‹ Exploración reproductiva</button>
+    <div class="sectiontitle">Servicio</div>
+    <div class="sublist">
+      <div class="subtile" onclick="bovinoServicioSub='iatf'; render()"><span>IATF</span>${r.servicio.iatf.length?`<span class="check">✓ (${r.servicio.iatf.length})</span>`:''}</div>
+      <div class="subtile" onclick="bovinoServicioSub='natural'; render()"><span>Servicio natural</span>${r.servicio.natural?'<span class="check">✓</span>':''}</div>
+    </div>
+  `;
+}
+function subServicioIatf(r){
+  if(!window._iatfTmp) window._iatfTmp = {caravana:'', fecha: hoyISO(), queHizo:''};
+  const it = window._iatfTmp;
+  const lista = r.servicio.iatf;
+  return `
+    <button class="backbtn" onclick="bovinoServicioSub=null; render()">‹ Servicio</button>
+    <div class="sectiontitle">IATF (${lista.length} cargados)</div>
+    <label>Caravana</label>
+    <input type="text" value="${escapeHtml(it.caravana)}" oninput="window._iatfTmp.caravana=this.value">
+    <label>Fecha de inicio de protocolo</label>
+    <input type="date" value="${it.fecha}" onchange="window._iatfTmp.fecha=this.value; render()">
+    <label>Qué hiciste ese día</label>
+    <input type="text" value="${escapeHtml(it.queHizo)}" oninput="window._iatfTmp.queHizo=this.value" placeholder="Ej: coloco dispositivo">
+    <div class="fieldnote">Retiro de dispositivo: ${fmtFecha(sumarDias(it.fecha,7))} · Inseminación: ${fmtFecha(sumarDias(sumarDias(it.fecha,7),2))}</div>
+    <button class="btn btn-green" style="margin-top:10px;" onclick="agregarIatfRegistro()">+ Agregar y siguiente animal</button>
+    ${lista.length ? `<div class="sectiontitle">Cargados</div>${lista.map(x=>`
+      <div class="listcard" style="cursor:default;">
+        <div class="meta"><b>Caravana ${escapeHtml(x.caravana)}</b> · inicio ${fmtFecha(x.fecha)}</div>
+        <div class="meta">Retiro dispositivo: ${fmtFecha(x.retiro)} · IA: ${fmtFecha(x.inseminacion)}</div>
+        ${x.queHizo?`<div class="meta">${escapeHtml(x.queHizo)}</div>`:''}
+      </div>`).join('')}` : ''}
+    ${botonesGuardar('guardarServicioFinal')}
+  `;
+}
+function agregarIatfRegistro(){
+  const it = window._iatfTmp;
+  if(!it.caravana || !it.fecha){ showToast('Completá caravana y fecha'); return; }
+  const retiro = sumarDias(it.fecha,7);
+  const inseminacion = sumarDias(retiro,2);
+  trabajoActual.exploracionReproductiva.servicio.iatf.push({caravana:it.caravana, fecha:it.fecha, queHizo:it.queHizo, retiro, inseminacion});
+  window._iatfTmp = {caravana:'', fecha: hoyISO(), queHizo:''};
+  render();
+}
+function subServicioNatural(r){
+  return `
+    <button class="backbtn" onclick="bovinoServicioSub=null; render()">‹ Servicio</button>
+    <div class="sectiontitle">Servicio natural</div>
+    <textarea id="sn_texto" placeholder="Ej: de la caravana 12 a la 30 van a servicio natural con el toro N°5...">${escapeHtml(r.servicio.natural||'')}</textarea>
+    <button class="btn btn-teal" onclick="guardarServicioNatural()">Guardar</button>
+  `;
+}
+function guardarServicioNatural(){
+  trabajoActual.exploracionReproductiva.servicio.natural = document.getElementById('sn_texto').value.trim();
+  showToast('Guardado');
+  render();
+}
+function guardarServicioFinal(estado){ finalizarGuardado(estado); }
+
+function subExamenGinecologico(r){
+  if(!window._ginTmp) window._ginTmp = {caravana:'', texto:''};
+  const g = window._ginTmp;
+  const lista = r.examenGinecologico.registros;
+  return `
+    <button class="backbtn" onclick="bovinoReproSub=null; render()">‹ Exploración reproductiva</button>
+    <div class="sectiontitle">Examen ginecológico</div>
+    <label>Caravana</label>
+    <input type="text" value="${escapeHtml(g.caravana)}" oninput="window._ginTmp.caravana=this.value">
+    <label>Observación</label>
+    <textarea id="gin_texto" oninput="window._ginTmp.texto=this.value" placeholder="Lo que encontrás...">${escapeHtml(g.texto)}</textarea>
+    <button class="btn btn-outline" onclick="agregarGinRegistro()">+ Agregar</button>
+    ${lista.length ? lista.map(x=>`<div class="listcard" style="cursor:default; margin-top:10px;"><div class="meta"><b>Caravana ${escapeHtml(x.caravana)}</b></div><div class="meta">${escapeHtml(x.texto)}</div></div>`).join('') : ''}
+  `;
+}
+function agregarGinRegistro(){
+  const g = window._ginTmp;
+  if(!g.caravana){ showToast('Falta la caravana'); return; }
+  trabajoActual.exploracionReproductiva.examenGinecologico.registros.push({...g});
+  window._ginTmp = {caravana:'', texto:''};
+  render();
+}
+
+// --- Examen andrológico ---
+function catAndrologico(){
+  const a = trabajoActual.examenAndrologico || {};
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Examen andrológico</div>
+    <label>Caravana</label>
+    <input type="text" id="an_caravana" value="${escapeHtml(a.caravana||'')}">
+    <label>Raza</label>
+    <input type="text" id="an_raza" value="${escapeHtml(a.raza||'')}">
+    <label>Edad</label>
+    <input type="text" id="an_edad" value="${escapeHtml(a.edad||'')}">
+    <div class="sectiontitle">Examen de aparato locomotor</div>
+    <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.locomotor===o?'selected':''}" onclick="setAndrologico('locomotor','${o}')">${o}</div>`).join('')}</div>
+    <div class="sectiontitle">Examen de aparato de la visión</div>
+    <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.vision===o?'selected':''}" onclick="setAndrologico('vision','${o}')">${o}</div>`).join('')}</div>
+    <div class="sectiontitle">Tono testicular</div>
+    <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.tonoTesticular===o?'selected':''}" onclick="setAndrologico('tonoTesticular','${o}')">${o}</div>`).join('')}</div>
+    <label>Circunferencia escrotal</label>
+    <textarea id="an_circunferencia" placeholder="Medida y detalle...">${escapeHtml((a.circunferencia||{}).texto||'')}</textarea>
+    ${fotosBlock((a.circunferencia||{}).fotos, ['examenAndrologico','circunferencia'])}
+    <label>Ecografía testicular</label>
+    <textarea id="an_ecografia" placeholder="Hallazgos...">${escapeHtml((a.ecografia||{}).texto||'')}</textarea>
+    ${fotosBlock((a.ecografia||{}).fotos, ['examenAndrologico','ecografia'])}
+    <label>Calidad seminal</label>
+    <textarea id="an_calidadSeminal" placeholder="Resultado...">${escapeHtml((a.calidadSeminal||{}).texto||'')}</textarea>
+    ${fotosBlock((a.calidadSeminal||{}).fotos, ['examenAndrologico','calidadSeminal'])}
+    ${botonesGuardar('guardarAndrologico')}
+  `;
+}
+function setAndrologico(campo,valor){
+  if(!trabajoActual.examenAndrologico) trabajoActual.examenAndrologico={};
+  trabajoActual.examenAndrologico[campo]=valor;
+  render();
+}
+function guardarAndrologico(estado){
+  const a = trabajoActual.examenAndrologico || {};
+  a.caravana = document.getElementById('an_caravana').value.trim();
+  a.raza = document.getElementById('an_raza').value.trim();
+  a.edad = document.getElementById('an_edad').value.trim();
+  a.circunferencia = {texto: document.getElementById('an_circunferencia').value.trim(), fotos: (a.circunferencia||{}).fotos||[]};
+  a.ecografia = {texto: document.getElementById('an_ecografia').value.trim(), fotos: (a.ecografia||{}).fotos||[]};
+  a.calidadSeminal = {texto: document.getElementById('an_calidadSeminal').value.trim(), fotos: (a.calidadSeminal||{}).fotos||[]};
+  trabajoActual.examenAndrologico = a;
+  finalizarGuardado(estado);
+}
+
+// --- Exámenes complementarios (Bovino) ---
+function catComplementariosBovino(){
+  const ex = trabajoActual.examenesComplementarios || {datosAnimal:{caravana:''}, sangradoMasivo:{tubos:[],observaciones:''}};
+  if(complementarioActivoBovino==='datosAnimal'){
+    return `
+      <button class="backbtn" onclick="complementarioActivoBovino=null; render()">‹ Exámenes complementarios</button>
+      <div class="sectiontitle">Datos del animal</div>
+      <label>Caravana</label>
+      <input type="text" id="cxb_caravana" value="${escapeHtml((ex.datosAnimal||{}).caravana||'')}">
+      <button class="btn btn-teal" onclick="guardarDatosAnimalComplementario()">Listo, volver</button>
+    `;
+  }
+  if(complementarioActivoBovino==='sangradoMasivo'){
+    const sm = ex.sangradoMasivo||{tubos:[],observaciones:''};
+    window._tubosBovinoTmp = sm.tubos && sm.tubos.length ? JSON.parse(JSON.stringify(sm.tubos)) : [{caravana:''}];
+    return `
+      <button class="backbtn" onclick="complementarioActivoBovino=null; render()">‹ Exámenes complementarios</button>
+      <div class="sectiontitle">Análisis de sangre grupal</div>
+      <div id="tubosBovinoList"></div>
+      <button type="button" class="addanimalbtn" onclick="agregarTuboBovino()">+ Agregar animal</button>
+      <label>Observaciones</label>
+      <textarea id="smb_obs" placeholder="Para qué se solicitó...">${escapeHtml(sm.observaciones||'')}</textarea>
+      <button class="btn btn-teal" onclick="guardarSangradoMasivoBovino()">Listo, volver</button>
+    `;
+  }
+  if(complementarioActivoBovino){
+    const labels = {ecografia:'Ecografía', radiografia:'Radiografía', sangrado:'Análisis de sangre', otro:'Otro procedimiento'};
+    const dato = ex[complementarioActivoBovino] || {texto:'', fotos:[]};
+    return `
+      <button class="backbtn" onclick="complementarioActivoBovino=null; render()">‹ Exámenes complementarios</button>
+      <div class="sectiontitle">${labels[complementarioActivoBovino]}</div>
+      <textarea id="cxb_texto" placeholder="Qué indicaste, solicitaste o hiciste...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['examenesComplementarios',complementarioActivoBovino])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarComplementarioBovinoSimple()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Exámenes complementarios</div>
+    <div class="sublist">
+      <div class="subtile" onclick="complementarioActivoBovino='datosAnimal'; render()"><span>${COMPLEMENTARIO_ICONOS.datosAnimal} Datos del animal</span>${(ex.datosAnimal&&ex.datosAnimal.caravana)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivoBovino='ecografia'; render()"><span>${COMPLEMENTARIO_ICONOS.ecografia} Ecografía</span>${hasData(ex.ecografia)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivoBovino='radiografia'; render()"><span>${COMPLEMENTARIO_ICONOS.radiografia} Radiografía</span>${hasData(ex.radiografia)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivoBovino='sangrado'; render()"><span>${COMPLEMENTARIO_ICONOS.sangrado} Análisis de sangre</span>${hasData(ex.sangrado)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivoBovino='sangradoMasivo'; render()"><span>${COMPLEMENTARIO_ICONOS.sangradoMasivo} Análisis de sangre grupal</span>${(ex.sangradoMasivo&&ex.sangradoMasivo.tubos&&ex.sangradoMasivo.tubos.length)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="complementarioActivoBovino='otro'; render()"><span>${COMPLEMENTARIO_ICONOS.otro} Otro procedimiento</span>${hasData(ex.otro)?'<span class="check">✓</span>':''}</div>
+    </div>
+    ${botonesGuardar('guardarComplementariosBovinoFinal')}
+  `;
+}
+function guardarDatosAnimalComplementario(){
+  if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios={};
+  trabajoActual.examenesComplementarios.datosAnimal = {caravana: document.getElementById('cxb_caravana').value.trim()};
+  complementarioActivoBovino=null; render();
+}
+function guardarComplementarioBovinoSimple(){
+  if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios={};
+  const actual = trabajoActual.examenesComplementarios[complementarioActivoBovino] || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('cxb_texto').value.trim();
+  trabajoActual.examenesComplementarios[complementarioActivoBovino] = actual;
+  complementarioActivoBovino=null; render();
+}
+function renderTubosBovinoList(){
+  const el = document.getElementById('tubosBovinoList'); if(!el) return;
+  el.innerHTML = window._tubosBovinoTmp.map((t,i)=>`
+    <div class="animalrow">
+      <span class="tubolab">N°${i+1}</span>
+      <input type="text" placeholder="Caravana" value="${escapeHtml(t.caravana)}" onchange="window._tubosBovinoTmp[${i}].caravana=this.value">
+      ${window._tubosBovinoTmp.length>1 ? `<button class="removeanimal" onclick="quitarTuboBovino(${i})">✕</button>` : ''}
+    </div>`).join('');
+}
+function agregarTuboBovino(){ window._tubosBovinoTmp.push({caravana:''}); renderTubosBovinoList(); }
+function quitarTuboBovino(i){ window._tubosBovinoTmp.splice(i,1); renderTubosBovinoList(); }
+function guardarSangradoMasivoBovino(){
+  if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios={};
+  trabajoActual.examenesComplementarios.sangradoMasivo = {tubos:window._tubosBovinoTmp, observaciones: document.getElementById('smb_obs').value.trim()};
+  complementarioActivoBovino=null; render();
+}
+function guardarComplementariosBovinoFinal(estado){ finalizarGuardado(estado); }
+
+// --- Procedimientos quirúrgicos (Bovino) ---
+function catQuirurgicosBovino(){
+  const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(sistemaQuirurgicoActivoBovino){
+    const dato = q[sistemaQuirurgicoActivoBovino] || {caravana:'', texto:'', fotos:[]};
+    return `
+      <button class="backbtn" onclick="sistemaQuirurgicoActivoBovino=null; render()">‹ Procedimientos quirúrgicos</button>
+      <div class="sectiontitle">${sistemaQuirurgicoActivoBovino}</div>
+      <label>Caravana</label>
+      <input type="text" id="qb_caravana" value="${escapeHtml(dato.caravana)}">
+      <label>Qué hiciste / indicaste</label>
+      <textarea id="qb_texto" placeholder="Describí el procedimiento...">${escapeHtml(dato.texto)}</textarea>
+      ${fotosBlock(dato.fotos, ['procedimientosQuirurgicos',sistemaQuirurgicoActivoBovino])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSistemaQuirurgicoBovino()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Sistema a intervenir</div>
+    <div class="sublist">
+      ${SISTEMAS.map(s=>`
+        <div class="subtile" onclick="sistemaQuirurgicoActivoBovino='${s}'; render()">
+          <span>${iconoSistema(s)} ${s}</span>${q[s]&&q[s].texto ? '<span class="check">✓</span>' : ''}
+        </div>`).join('')}
+    </div>
+    ${botonesGuardar('guardarQuirurgicosBovinoFinal')}
+  `;
+}
+function guardarSistemaQuirurgicoBovino(){
+  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos={};
+  const previo = trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivoBovino] || {fotos:[]};
+  trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivoBovino] = {
+    caravana: document.getElementById('qb_caravana').value.trim(),
+    texto: document.getElementById('qb_texto').value.trim(),
+    fotos: previo.fotos||[],
+  };
+  sistemaQuirurgicoActivoBovino=null; render();
+}
+function guardarQuirurgicosBovinoFinal(estado){ finalizarGuardado(estado); }
+
+// --- Tratamiento (Bovino) ---
+function catTratamientoBovino(){
+  const t = trabajoActual.tratamiento || {individual:'', masivo:{filas:[],observaciones:''}};
+  if(tratamientoModoBovino==='individual'){
+    const dato = t.individual && typeof t.individual==='object' ? t.individual : {texto:t.individual||'', fotos:[]};
+    return `
+      <button class="backbtn" onclick="tratamientoModoBovino=null; render()">‹ Tratamiento</button>
+      <div class="sectiontitle">Tratamiento individual</div>
+      <textarea id="trb_ind" placeholder="Qué se aplicó a este animal...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['tratamiento','individual'])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarTratamientoIndividualBovino()">Listo, volver</button>
+    `;
+  }
+  if(tratamientoModoBovino==='masivo'){
+    window._tratMasivoTmp = t.masivo && t.masivo.filas && t.masivo.filas.length ? JSON.parse(JSON.stringify(t.masivo.filas)) : [{caravana:'',producto:'',dosis:'',repetir:''}];
+    return `
+      <button class="backbtn" onclick="tratamientoModoBovino=null; render()">‹ Tratamiento</button>
+      <div class="sectiontitle">Tratamiento masivo</div>
+      <div id="tratMasivoList"></div>
+      <button type="button" class="addanimalbtn" onclick="agregarFilaTratMasivo()">+ Agregar animal</button>
+      <label>Observaciones</label>
+      <textarea id="trb_obs" placeholder="Ej: se trataron 40 animales con tal producto, se repite tal fecha...">${escapeHtml((t.masivo||{}).observaciones||'')}</textarea>
+      <button class="btn btn-teal" onclick="guardarTratamientoMasivoBovino()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Tratamiento</div>
+    <div class="sublist">
+      <div class="subtile" onclick="tratamientoModoBovino='individual'; render()"><span>Individual</span>${hasData(t.individual)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="tratamientoModoBovino='masivo'; render()"><span>Masivo</span>${(t.masivo&&t.masivo.filas&&t.masivo.filas.length)?'<span class="check">✓</span>':''}</div>
+    </div>
+    ${botonesGuardar('guardarTratamientoBovinoFinal')}
+  `;
+}
+function guardarTratamientoIndividualBovino(){
+  if(!trabajoActual.tratamiento) trabajoActual.tratamiento={individual:{texto:'',fotos:[]},masivo:{filas:[],observaciones:''}};
+  const previo = (trabajoActual.tratamiento.individual && typeof trabajoActual.tratamiento.individual==='object') ? trabajoActual.tratamiento.individual : {fotos:[]};
+  trabajoActual.tratamiento.individual = {texto: document.getElementById('trb_ind').value.trim(), fotos: previo.fotos||[]};
+  tratamientoModoBovino=null; render();
+}
+function renderTratMasivoList(){
+  const el = document.getElementById('tratMasivoList'); if(!el) return;
+  el.innerHTML = window._tratMasivoTmp.map((f,i)=>`
+    <div class="animalrow">
+      <input type="text" placeholder="Caravana" value="${escapeHtml(f.caravana)}" onchange="window._tratMasivoTmp[${i}].caravana=this.value">
+      <input type="text" placeholder="Producto" value="${escapeHtml(f.producto)}" onchange="window._tratMasivoTmp[${i}].producto=this.value">
+      <input type="text" placeholder="Dosis" value="${escapeHtml(f.dosis)}" onchange="window._tratMasivoTmp[${i}].dosis=this.value">
+      <input type="text" placeholder="Repetir" value="${escapeHtml(f.repetir)}" onchange="window._tratMasivoTmp[${i}].repetir=this.value">
+      ${window._tratMasivoTmp.length>1 ? `<button class="removeanimal" onclick="quitarFilaTratMasivo(${i})">✕</button>` : ''}
+    </div>`).join('');
+}
+function agregarFilaTratMasivo(){ window._tratMasivoTmp.push({caravana:'',producto:'',dosis:'',repetir:''}); renderTratMasivoList(); }
+function quitarFilaTratMasivo(i){ window._tratMasivoTmp.splice(i,1); renderTratMasivoList(); }
+function guardarTratamientoMasivoBovino(){
+  if(!trabajoActual.tratamiento) trabajoActual.tratamiento={individual:'',masivo:{filas:[],observaciones:''}};
+  trabajoActual.tratamiento.masivo = {filas: window._tratMasivoTmp, observaciones: document.getElementById('trb_obs').value.trim()};
+  tratamientoModoBovino=null; render();
+}
+function guardarTratamientoBovinoFinal(estado){ finalizarGuardado(estado); }
+
+// --- Sanidad (Bovino) ---
+function catSanidadBovino(){
+  const s = trabajoActual.sanidad || {individual:{vacunacion:'',desparasitacion:'',otra:''}, masivo:{vacunacion:{filas:[],observaciones:''},desparasitacion:{filas:[],observaciones:''},otra:{filas:[],observaciones:''}}};
+  const labels={vacunacion:'Vacunación',desparasitacion:'Desparasitación',otra:'Otra'};
+  if(sanidadModoBovino && sanidadTipoBovino){
+    if(sanidadModoBovino==='individual'){
+      const dato = (s.individual||{})[sanidadTipoBovino] || {texto:'', fotos:[]};
+      return `
+        <button class="backbtn" onclick="sanidadTipoBovino=null; render()">‹ Individual</button>
+        <div class="sectiontitle">${labels[sanidadTipoBovino]} (individual)</div>
+        <textarea id="san_ind_texto" placeholder="Qué se hizo...">${escapeHtml(dato.texto||'')}</textarea>
+        ${fotosBlock(dato.fotos, ['sanidad','individual',sanidadTipoBovino])}
+        <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSanidadIndividualBovino()">Listo, volver</button>
+      `;
+    } else {
+      const grupo = (s.masivo||{})[sanidadTipoBovino] || {filas:[],observaciones:''};
+      window._sanMasivoTmp = grupo.filas && grupo.filas.length ? JSON.parse(JSON.stringify(grupo.filas)) : [{caravana:'',producto:'',dosis:'',repetir:''}];
+      return `
+        <button class="backbtn" onclick="sanidadTipoBovino=null; render()">‹ Masivo</button>
+        <div class="sectiontitle">${labels[sanidadTipoBovino]} (masivo)</div>
+        <div id="sanMasivoList"></div>
+        <button type="button" class="addanimalbtn" onclick="agregarFilaSanMasivo()">+ Agregar animal</button>
+        <label>Observaciones</label>
+        <textarea id="san_masivo_obs" placeholder="Detalle general...">${escapeHtml(grupo.observaciones||'')}</textarea>
+        <button class="btn btn-teal" onclick="guardarSanidadMasivaBovinoTipo()">Listo, volver</button>
+      `;
+    }
+  }
+  if(sanidadModoBovino && !sanidadTipoBovino){
+    return `
+      <button class="backbtn" onclick="sanidadModoBovino=null; render()">‹ Sanidad</button>
+      <div class="sectiontitle">${sanidadModoBovino==='individual'?'Individual':'Masivo'}</div>
+      <div class="sublist">
+        <div class="subtile" onclick="sanidadTipoBovino='vacunacion'; render()"><span>Vacunación</span></div>
+        <div class="subtile" onclick="sanidadTipoBovino='desparasitacion'; render()"><span>Desparasitación</span></div>
+        <div class="subtile" onclick="sanidadTipoBovino='otra'; render()"><span>Otra</span></div>
+      </div>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Sanidad</div>
+    <div class="sublist">
+      <div class="subtile" onclick="sanidadModoBovino='individual'; render()"><span>Individual</span></div>
+      <div class="subtile" onclick="sanidadModoBovino='masivo'; render()"><span>Masivo</span></div>
+    </div>
+    ${botonesGuardar('guardarSanidadBovinoFinal')}
+  `;
+}
+function guardarSanidadIndividualBovino(){
+  if(!trabajoActual.sanidad) trabajoActual.sanidad={individual:{},masivo:{}};
+  if(!trabajoActual.sanidad.individual) trabajoActual.sanidad.individual={};
+  const previo = trabajoActual.sanidad.individual[sanidadTipoBovino] || {fotos:[]};
+  trabajoActual.sanidad.individual[sanidadTipoBovino] = {texto: document.getElementById('san_ind_texto').value.trim(), fotos: previo.fotos||[]};
+  sanidadTipoBovino=null; render();
+}
+function renderSanMasivoList(){
+  const el = document.getElementById('sanMasivoList'); if(!el) return;
+  el.innerHTML = window._sanMasivoTmp.map((f,i)=>`
+    <div class="animalrow">
+      <input type="text" placeholder="Caravana" value="${escapeHtml(f.caravana)}" onchange="window._sanMasivoTmp[${i}].caravana=this.value">
+      <input type="text" placeholder="Producto" value="${escapeHtml(f.producto)}" onchange="window._sanMasivoTmp[${i}].producto=this.value">
+      <input type="text" placeholder="Dosis" value="${escapeHtml(f.dosis)}" onchange="window._sanMasivoTmp[${i}].dosis=this.value">
+      <input type="text" placeholder="Repetir" value="${escapeHtml(f.repetir)}" onchange="window._sanMasivoTmp[${i}].repetir=this.value">
+      ${window._sanMasivoTmp.length>1 ? `<button class="removeanimal" onclick="quitarFilaSanMasivo(${i})">✕</button>` : ''}
+    </div>`).join('');
+}
+function agregarFilaSanMasivo(){ window._sanMasivoTmp.push({caravana:'',producto:'',dosis:'',repetir:''}); renderSanMasivoList(); }
+function quitarFilaSanMasivo(i){ window._sanMasivoTmp.splice(i,1); renderSanMasivoList(); }
+function guardarSanidadMasivaBovinoTipo(){
+  if(!trabajoActual.sanidad) trabajoActual.sanidad={individual:{},masivo:{}};
+  if(!trabajoActual.sanidad.masivo) trabajoActual.sanidad.masivo={};
+  trabajoActual.sanidad.masivo[sanidadTipoBovino] = {filas: window._sanMasivoTmp, observaciones: document.getElementById('san_masivo_obs').value.trim()};
+  sanidadTipoBovino=null; render();
+}
+function guardarSanidadBovinoFinal(estado){ finalizarGuardado(estado); }
+
+// hooks for dynamic sub-lists after render
+const _origRender = render;
+render = function(){
+  _origRender();
+  if(view==='equino-complementarios' && complementarioActivo==='sangradoMasivo') renderTubosList();
+  if(view==='equino-sanidad' && sanidadMasivaActiva) renderSanidadFilas();
+  if(view==='bovino-complementarios' && complementarioActivoBovino==='sangradoMasivo') renderTubosBovinoList();
+  if(view==='bovino-tratamiento' && tratamientoModoBovino==='masivo') renderTratMasivoList();
+  if(view==='bovino-sanidad' && sanidadModoBovino && sanidadTipoBovino) renderSanMasivoList();
+};
+
+// ================= MASCOTAS: Canino / Felino / Otros =================
+let mascotaProcActivo = null, mascotaSistemaClinicoActivo = null, mascotaComplementarioActivo = null,
+    mascotaSistemaQuirurgicoActivo = null, mascotaSanidadSub = null;
+
+const VACUNAS_CANINO = [{key:'quintuple', label:'Quíntuple', dias:21}, {key:'antirrabica', label:'Antirrábica', dias:365}];
+const VACUNAS_FELINO = [{key:'triple', label:'Triple felina', dias:30}, {key:'antirrabica', label:'Antirrábica', dias:365}];
+function listaVacunasPara(especie){
+  if(especie==='Canino') return VACUNAS_CANINO;
+  if(especie==='Felino') return VACUNAS_FELINO;
+  return null;
+}
+function iniciarMascota(especie){
+  trabajoActual = {
+    id:null, clienteId:clienteContexto, establecimientoId: clienteEstablecimientoContexto, especie, estado:'parcial', fechaInicio: hoyISO(),
+    facturado:false, cobrado:false,
+    informacionGeneral: {propietario:{}, paciente:{}},
+    exploracionClinica: {examenClinico:{}},
+    examenesComplementarios: {},
+    procedimientosQuirurgicos: {},
+    sanidad: {},
+    tratamientos: {texto:'',fotos:[]},
+    otroProcedimiento: {texto:'',fotos:[]}
+  };
+  navigate('mascotaCategorias');
+}
+function iniciarCanino(){ iniciarMascota('Canino'); }
+function iniciarFelino(){ iniciarMascota('Felino'); }
+function iniciarOtrosEspecie(){ iniciarMascota('Otros'); }
+function finalizarGuardadoMascota(estado, volverA){
+  guardarTrabajoActual(estado);
+  showToast(estado==='finalizado' ? 'Trabajo finalizado' : 'Guardado parcialmente');
+  if(estado==='finalizado'){ trabajoActual=null; navigate('home'); }
+  else navigate(volverA);
+}
+
+function viewMascotaCategorias(){
+  const t = trabajoActual;
+  return `
+    <button class="backbtn" onclick="salirDeTrabajo()">‹ Salir sin continuar</button>
+    <div class="statusbar">
+      <span>${emojiEspecie(t.especie)} ${t.especie} ${t.clienteId?'· '+escapeHtml(clienteNombreCompleto(clienteById(t.clienteId)||{})):'· sin cliente'}</span>
+      <span class="tag ${t.estado==='finalizado'?'finalizado':'parcial'}">${t.estado==='finalizado'?'Finalizado':'En curso'}</span>
+    </div>
+    <div class="catlist">
+      <div class="cattile" onclick="navigate('mascota-general')">
+        <div class="left"><span class="emoji">🪪</span><span class="lab">Información general</span></div>
+        ${hasData(t.informacionGeneral)?'<span class="check">✓</span>':''}
+      </div>
+      <div class="cattile" onclick="mascotaProcActivo=null; navigate('mascota-procedimientos')">
+        <div class="left"><span class="emoji">🩺</span><span class="lab">Procedimientos</span></div>
+      </div>
+    </div>
+  `;
+}
+
+// --- Información general ---
+function catMascotaGeneral(){
+  const g = trabajoActual.informacionGeneral || {propietario:{}, paciente:{}};
+  const p = g.propietario||{}, pa = g.paciente||{};
+  return `
+    <button class="backbtn" onclick="navigate('mascotaCategorias')">‹ Categorías</button>
+    <div class="sectiontitle">Propietario</div>
+    <label>Nombre</label><input type="text" id="mg_pnombre" value="${escapeHtml(p.nombre||'')}">
+    <label>Apellido</label><input type="text" id="mg_papellido" value="${escapeHtml(p.apellido||'')}">
+    <label>Dirección</label><input type="text" id="mg_pdireccion" value="${escapeHtml(p.direccion||'')}">
+    <label>Teléfono</label><input type="text" id="mg_ptelefono" value="${escapeHtml(p.telefono||'')}">
+    <div class="sectiontitle">Paciente</div>
+    <label>Nombre</label><input type="text" id="mg_nombre" value="${escapeHtml(pa.nombre||'')}">
+    <label>Raza</label><input type="text" id="mg_raza" value="${escapeHtml(pa.raza||'')}">
+    <label>Sexo</label><input type="text" id="mg_sexo" value="${escapeHtml(pa.sexo||'')}">
+    <label>Edad</label><input type="text" id="mg_edad" value="${escapeHtml(pa.edad||'')}">
+    ${botonesGuardar('guardarMascotaGeneral')}
+  `;
+}
+function guardarMascotaGeneral(estado){
+  trabajoActual.informacionGeneral = {
+    propietario: {
+      nombre: document.getElementById('mg_pnombre').value.trim(),
+      apellido: document.getElementById('mg_papellido').value.trim(),
+      direccion: document.getElementById('mg_pdireccion').value.trim(),
+      telefono: document.getElementById('mg_ptelefono').value.trim(),
+    },
+    paciente: {
+      nombre: document.getElementById('mg_nombre').value.trim(),
+      raza: document.getElementById('mg_raza').value.trim(),
+      sexo: document.getElementById('mg_sexo').value.trim(),
+      edad: document.getElementById('mg_edad').value.trim(),
+    }
+  };
+  finalizarGuardadoMascota(estado, 'mascotaCategorias');
+}
+
+// --- Procedimientos (submenú) ---
+function catMascotaProcedimientos(){
+  if(mascotaProcActivo==='clinica') return catClinicaMascota();
+  if(mascotaProcActivo==='complementarios') return catComplementariosMascota();
+  if(mascotaProcActivo==='quirurgicos') return catQuirurgicosMascota();
+  if(mascotaProcActivo==='sanidad') return catSanidadMascota();
+  if(mascotaProcActivo==='tratamientos') return catTratamientosMascota();
+  if(mascotaProcActivo==='otro') return catOtroMascota();
+  const t = trabajoActual;
+  return `
+    <button class="backbtn" onclick="navigate('mascotaCategorias')">‹ Categorías</button>
+    <div class="sectiontitle">Procedimientos</div>
+    <div class="catlist">
+      <div class="cattile" onclick="mascotaSistemaClinicoActivo=null; mascotaProcActivo='clinica'; render()"><div class="left"><span class="emoji">🩺</span><span class="lab">Exploración clínica</span></div>${hasData(t.exploracionClinica)?'<span class="check">✓</span>':''}</div>
+      <div class="cattile" onclick="mascotaComplementarioActivo=null; mascotaProcActivo='complementarios'; render()"><div class="left"><span class="emoji">🔬</span><span class="lab">Exámenes complementarios</span></div>${hasData(t.examenesComplementarios)?'<span class="check">✓</span>':''}</div>
+      <div class="cattile" onclick="mascotaSistemaQuirurgicoActivo=null; mascotaProcActivo='quirurgicos'; render()"><div class="left"><span class="emoji">🔪</span><span class="lab">Procedimientos quirúrgicos</span></div>${hasData(t.procedimientosQuirurgicos)?'<span class="check">✓</span>':''}</div>
+      <div class="cattile" onclick="mascotaSanidadSub=null; mascotaProcActivo='sanidad'; render()"><div class="left"><span class="emoji">💉</span><span class="lab">Sanidad</span></div>${hasData(t.sanidad)?'<span class="check">✓</span>':''}</div>
+      <div class="cattile" onclick="mascotaProcActivo='tratamientos'; render()"><div class="left"><span class="emoji">💊</span><span class="lab">Tratamientos</span></div>${hasData(t.tratamientos)?'<span class="check">✓</span>':''}</div>
+      <div class="cattile" onclick="mascotaProcActivo='otro'; render()"><div class="left"><span class="emoji">➕</span><span class="lab">Otros procedimientos</span></div>${hasData(t.otroProcedimiento)?'<span class="check">✓</span>':''}</div>
+    </div>
+  `;
+}
+
+// --- Exploración clínica ---
+function catClinicaMascota(){
+  const e = trabajoActual.exploracionClinica || {examenClinico:{}};
+  if(mascotaSistemaClinicoActivo){
+    const dato = (e.examenClinico||{})[mascotaSistemaClinicoActivo] || {texto:'',fotos:[]};
+    return `
+      <button class="backbtn" onclick="mascotaSistemaClinicoActivo=null; render()">‹ Exploración clínica</button>
+      <div class="sectiontitle">${mascotaSistemaClinicoActivo}</div>
+      <label>Maniobras realizadas / hallazgos / tratamiento indicado</label>
+      <textarea id="ecm_texto" placeholder="Escribí lo que hiciste o encontraste...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['exploracionClinica','examenClinico',mascotaSistemaClinicoActivo])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSistemaClinicoMascota()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Estado general</div>
+    <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${e.estadoGeneral===o?'selected':''}" onclick="setClinicaMascota('estadoGeneral','${o}')">${o}</div>`).join('')}</div>
+    <div class="sectiontitle">Condición corporal</div>
+    <div class="optrow">${['Regular','Buena','Mala'].map(o=>`<div class="optbtn ${e.condicionCorporal===o?'selected':''}" onclick="setClinicaMascota('condicionCorporal','${o}')">${o}</div>`).join('')}</div>
+    <div class="sectiontitle">Examen clínico por sistema</div>
+    <div class="sublist">
+      ${SISTEMAS.map(s=>`<div class="subtile" onclick="mascotaSistemaClinicoActivo='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${hasData((e.examenClinico||{})[s])?'<span class="check">✓</span>':''}</div>`).join('')}
+    </div>
+    ${botonesGuardar('guardarClinicaMascotaFinal', 'cancelarMascotaProc')}
+  `;
+}
+function setClinicaMascota(campo,valor){
+  if(!trabajoActual.exploracionClinica) trabajoActual.exploracionClinica={examenClinico:{}};
+  trabajoActual.exploracionClinica[campo]=valor;
+  render();
+}
+function guardarSistemaClinicoMascota(){
+  if(!trabajoActual.exploracionClinica.examenClinico) trabajoActual.exploracionClinica.examenClinico={};
+  const actual = trabajoActual.exploracionClinica.examenClinico[mascotaSistemaClinicoActivo] || {texto:'',fotos:[]};
+  actual.texto = document.getElementById('ecm_texto').value.trim();
+  trabajoActual.exploracionClinica.examenClinico[mascotaSistemaClinicoActivo] = actual;
+  mascotaSistemaClinicoActivo = null;
+  render();
+}
+function guardarClinicaMascotaFinal(estado){ mascotaProcActivo=null; finalizarGuardadoMascota(estado, 'mascota-procedimientos'); }
+
+// --- Exámenes complementarios ---
+function catComplementariosMascota(){
+  const ex = trabajoActual.examenesComplementarios || {};
+  if(mascotaComplementarioActivo){
+    const labels = {radiografia:'Radiografía', ecografia:'Ecografía', sangrado:'Análisis de sangre', otros:'Otros'};
+    const dato = ex[mascotaComplementarioActivo] || {texto:'',fotos:[]};
+    return `
+      <button class="backbtn" onclick="mascotaComplementarioActivo=null; render()">‹ Exámenes complementarios</button>
+      <div class="sectiontitle">${labels[mascotaComplementarioActivo]}</div>
+      <textarea id="cxm_texto" placeholder="Qué indicaste, solicitaste o hiciste...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['examenesComplementarios',mascotaComplementarioActivo])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarComplementarioMascotaSimple()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Exámenes complementarios</div>
+    <div class="sublist">
+      <div class="subtile" onclick="mascotaComplementarioActivo='radiografia'; render()"><span>${COMPLEMENTARIO_ICONOS.radiografia} Radiografía</span>${hasData(ex.radiografia)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="mascotaComplementarioActivo='ecografia'; render()"><span>${COMPLEMENTARIO_ICONOS.ecografia} Ecografía</span>${hasData(ex.ecografia)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="mascotaComplementarioActivo='sangrado'; render()"><span>${COMPLEMENTARIO_ICONOS.sangrado} Análisis de sangre</span>${hasData(ex.sangrado)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="mascotaComplementarioActivo='otros'; render()"><span>${COMPLEMENTARIO_ICONOS.otros} Otros</span>${hasData(ex.otros)?'<span class="check">✓</span>':''}</div>
+    </div>
+    ${botonesGuardar('guardarComplementariosMascotaFinal', 'cancelarMascotaProc')}
+  `;
+}
+function guardarComplementarioMascotaSimple(){
+  if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios={};
+  const actual = trabajoActual.examenesComplementarios[mascotaComplementarioActivo] || {texto:'',fotos:[]};
+  actual.texto = document.getElementById('cxm_texto').value.trim();
+  trabajoActual.examenesComplementarios[mascotaComplementarioActivo] = actual;
+  mascotaComplementarioActivo = null;
+  render();
+}
+function guardarComplementariosMascotaFinal(estado){ mascotaProcActivo=null; finalizarGuardadoMascota(estado, 'mascota-procedimientos'); }
+
+// --- Procedimientos quirúrgicos ---
+function catQuirurgicosMascota(){
+  const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(mascotaSistemaQuirurgicoActivo){
+    const dato = q[mascotaSistemaQuirurgicoActivo] || {texto:'',fotos:[]};
+    return `
+      <button class="backbtn" onclick="mascotaSistemaQuirurgicoActivo=null; render()">‹ Procedimientos quirúrgicos</button>
+      <div class="sectiontitle">${mascotaSistemaQuirurgicoActivo}</div>
+      <label>Qué hiciste / indicaste</label>
+      <textarea id="qm_texto" placeholder="Describí el procedimiento...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['procedimientosQuirurgicos',mascotaSistemaQuirurgicoActivo])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSistemaQuirurgicoMascota()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Sistema a intervenir</div>
+    <div class="sublist">
+      ${SISTEMAS.map(s=>`<div class="subtile" onclick="mascotaSistemaQuirurgicoActivo='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${hasData(q[s])?'<span class="check">✓</span>':''}</div>`).join('')}
+    </div>
+    ${botonesGuardar('guardarQuirurgicosMascotaFinal', 'cancelarMascotaProc')}
+  `;
+}
+function guardarSistemaQuirurgicoMascota(){
+  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos={};
+  const actual = trabajoActual.procedimientosQuirurgicos[mascotaSistemaQuirurgicoActivo] || {texto:'',fotos:[]};
+  actual.texto = document.getElementById('qm_texto').value.trim();
+  trabajoActual.procedimientosQuirurgicos[mascotaSistemaQuirurgicoActivo] = actual;
+  mascotaSistemaQuirurgicoActivo = null;
+  render();
+}
+function guardarQuirurgicosMascotaFinal(estado){ mascotaProcActivo=null; finalizarGuardadoMascota(estado, 'mascota-procedimientos'); }
+
+// --- Sanidad ---
+function catSanidadMascota(){
+  const s = trabajoActual.sanidad || {};
+  if(mascotaSanidadSub==='vacuna') return subVacunaMascota(s);
+  if(mascotaSanidadSub==='desparasitaciones') return subTextoSanidadMascota(s,'desparasitaciones','Desparasitaciones');
+  if(mascotaSanidadSub==='otros') return subTextoSanidadMascota(s,'otros','Otros');
+  return `
+    <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Sanidad</div>
+    <div class="sublist">
+      <div class="subtile" onclick="mascotaSanidadSub='vacuna'; render()"><span>Vacuna</span>${hasData(s.vacuna)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="mascotaSanidadSub='desparasitaciones'; render()"><span>Desparasitaciones</span>${hasData(s.desparasitaciones)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="mascotaSanidadSub='otros'; render()"><span>Otros</span>${hasData(s.otros)?'<span class="check">✓</span>':''}</div>
+    </div>
+    ${botonesGuardar('guardarSanidadMascotaFinal', 'cancelarMascotaProc')}
+  `;
+}
+function subVacunaMascota(s){
+  const lista = listaVacunasPara(trabajoActual.especie);
+  if(!lista){
+    const dato = (s.vacuna && typeof s.vacuna==='object' && 'texto' in s.vacuna) ? s.vacuna : {texto:'',fotos:[]};
+    return `
+      <button class="backbtn" onclick="mascotaSanidadSub=null; render()">‹ Sanidad</button>
+      <div class="sectiontitle">Vacuna</div>
+      <textarea id="vac_texto" placeholder="Qué se aplicó...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['sanidad','vacuna'])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarVacunaMascotaTexto()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="mascotaSanidadSub=null; render()">‹ Sanidad</button>
+    <div class="sectiontitle">Vacuna</div>
+    ${lista.map(v=>{
+      const dato = (s.vacuna||{})[v.key] || null;
+      return `<div class="vacrow">
+        <div class="top">
+          <span class="lab">${v.label}</span>
+          <button class="vacbtn ${dato?'done':''}" onclick="marcarVacunaMascota('${v.key}',${v.dias})">${dato?'Aplicada hoy ✓':'Marcar aplicada hoy'}</button>
+        </div>
+        ${dato?`<div class="prox">Próxima vacunación: ${fmtFecha(dato.proxima)}</div>`:''}
+        <textarea placeholder="Observaciones (opcional): ej. completó el esquema, la próxima ya es anual..." style="margin-top:8px; min-height:50px;" onchange="actualizarObsVacunaMascota('${v.key}', this.value)">${escapeHtml((dato&&dato.observaciones)||'')}</textarea>
+      </div>`;
+    }).join('')}
+  `;
+}
+function actualizarObsVacunaMascota(key, valor){
+  if(!trabajoActual.sanidad) trabajoActual.sanidad={};
+  if(!trabajoActual.sanidad.vacuna || typeof trabajoActual.sanidad.vacuna!=='object') trabajoActual.sanidad.vacuna={};
+  if(!trabajoActual.sanidad.vacuna[key]) trabajoActual.sanidad.vacuna[key] = {fecha:null, proxima:null};
+  trabajoActual.sanidad.vacuna[key].observaciones = valor;
+}
+function marcarVacunaMascota(key,dias){
+  if(!trabajoActual.sanidad) trabajoActual.sanidad={};
+  if(!trabajoActual.sanidad.vacuna || typeof trabajoActual.sanidad.vacuna!=='object') trabajoActual.sanidad.vacuna={};
+  const hoy = hoyISO();
+  const previo = trabajoActual.sanidad.vacuna[key] || {};
+  trabajoActual.sanidad.vacuna[key] = {fecha:hoy, proxima: sumarDias(hoy,dias), observaciones: previo.observaciones||''};
+  render();
+}
+function guardarVacunaMascotaTexto(){
+  if(!trabajoActual.sanidad) trabajoActual.sanidad={};
+  trabajoActual.sanidad.vacuna = {texto: document.getElementById('vac_texto').value.trim(), fotos: (trabajoActual.sanidad.vacuna&&trabajoActual.sanidad.vacuna.fotos)||[]};
+  mascotaSanidadSub=null; render();
+}
+function subTextoSanidadMascota(s, key, label){
+  const dato = s[key] || {texto:'',fotos:[]};
+  return `
+    <button class="backbtn" onclick="mascotaSanidadSub=null; render()">‹ Sanidad</button>
+    <div class="sectiontitle">${label}</div>
+    <textarea id="sanm_texto" placeholder="Detalle...">${escapeHtml(dato.texto||'')}</textarea>
+    ${fotosBlock(dato.fotos, ['sanidad',key])}
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarTextoSanidadMascota('${key}')">Listo, volver</button>
+  `;
+}
+function guardarTextoSanidadMascota(key){
+  if(!trabajoActual.sanidad) trabajoActual.sanidad={};
+  const actual = trabajoActual.sanidad[key] || {texto:'',fotos:[]};
+  actual.texto = document.getElementById('sanm_texto').value.trim();
+  trabajoActual.sanidad[key] = actual;
+  mascotaSanidadSub=null; render();
+}
+function guardarSanidadMascotaFinal(estado){ mascotaProcActivo=null; finalizarGuardadoMascota(estado, 'mascota-procedimientos'); }
+
+// --- Tratamientos ---
+function catTratamientosMascota(){
+  const dato = trabajoActual.tratamientos || {texto:'',fotos:[]};
+  return `
+    <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Tratamientos</div>
+    <textarea id="trm_texto" placeholder="Qué se aplicó, para qué, cuándo toca repetir...">${escapeHtml(dato.texto||'')}</textarea>
+    ${fotosBlock(dato.fotos, ['tratamientos'])}
+    ${botonesGuardar('guardarTratamientosMascotaFinal', 'cancelarMascotaProc')}
+  `;
+}
+function guardarTratamientosMascotaFinal(estado){
+  const actual = trabajoActual.tratamientos || {texto:'',fotos:[]};
+  actual.texto = document.getElementById('trm_texto').value.trim();
+  trabajoActual.tratamientos = actual;
+  mascotaProcActivo=null;
+  finalizarGuardadoMascota(estado, 'mascota-procedimientos');
+}
+
+// --- Otros procedimientos ---
+function catOtroMascota(){
+  const dato = trabajoActual.otroProcedimiento || {texto:'',fotos:[]};
+  return `
+    <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Otros procedimientos</div>
+    <textarea id="otm_texto" placeholder="Algo esporádico que no entra en las demás categorías...">${escapeHtml(dato.texto||'')}</textarea>
+    ${fotosBlock(dato.fotos, ['otroProcedimiento'])}
+    ${botonesGuardar('guardarOtroMascotaFinal', 'cancelarMascotaProc')}
+  `;
+}
+function guardarOtroMascotaFinal(estado){
+  const actual = trabajoActual.otroProcedimiento || {texto:'',fotos:[]};
+  actual.texto = document.getElementById('otm_texto').value.trim();
+  trabajoActual.otroProcedimiento = actual;
+  mascotaProcActivo=null;
+  finalizarGuardadoMascota(estado, 'mascota-procedimientos');
+}
+
+function resumenTrabajoMascota(t){
+  let out = `Especie: ${t.especie}\nEstado: ${t.estado}\n`;
+  const g = t.informacionGeneral;
+  if(g && hasData(g)){
+    const p = g.propietario||{}, pa = g.paciente||{};
+    out += `\nPropietario: ${[p.nombre,p.apellido].filter(Boolean).join(' ')||'—'}${p.telefono?' · '+p.telefono:''}${p.direccion?' · '+p.direccion:''}\n`;
+    out += `Paciente: ${pa.nombre||'—'} · ${pa.raza||''} · ${pa.sexo||''} · ${pa.edad||''}\n`;
+  }
+  if(t.exploracionClinica && hasData(t.exploracionClinica)){
+    out += `\nExploración clínica:\n`;
+    if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
+    if(t.exploracionClinica.condicionCorporal) out += `  Condición corporal: ${t.exploracionClinica.condicionCorporal}\n`;
+    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+  }
+  if(t.examenesComplementarios && hasData(t.examenesComplementarios)){
+    out += `\nExámenes complementarios:\n`;
+    const etiquetasCompM = {radiografia:'radiografía', ecografia:'ecografía', sangrado:'análisis de sangre', otros:'otros'};
+    Object.entries(t.examenesComplementarios).forEach(([k,v])=>{ if(hasData(v)) out += `  ${etiquetasCompM[k]||k}: ${campoResumen(v)}\n`; });
+  }
+  if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
+    out += `\nProcedimientos quirúrgicos:\n`;
+    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+  }
+  if(t.sanidad && hasData(t.sanidad)){
+    out += `\nSanidad:\n`;
+    const lista = listaVacunasPara(t.especie);
+    if(lista && t.sanidad.vacuna && typeof t.sanidad.vacuna==='object'){
+      lista.forEach(v=>{ if(t.sanidad.vacuna[v.key]) out += `  ${v.label}: aplicada ${fmtFecha(t.sanidad.vacuna[v.key].fecha)}, próxima ${fmtFecha(t.sanidad.vacuna[v.key].proxima)}${t.sanidad.vacuna[v.key].observaciones?' — '+t.sanidad.vacuna[v.key].observaciones:''}\n`; });
+    } else if(hasData(t.sanidad.vacuna)) out += `  Vacuna: ${campoResumen(t.sanidad.vacuna)}\n`;
+    if(hasData(t.sanidad.desparasitaciones)) out += `  Desparasitaciones: ${campoResumen(t.sanidad.desparasitaciones)}\n`;
+    if(hasData(t.sanidad.otros)) out += `  Otros: ${campoResumen(t.sanidad.otros)}\n`;
+  }
+  if(hasData(t.tratamientos)) out += `\nTratamientos: ${campoResumen(t.tratamientos)}\n`;
+  if(hasData(t.otroProcedimiento)) out += `\nOtros procedimientos: ${campoResumen(t.otroProcedimiento)}\n`;
+  return out;
+}
+
+// ================= HISTORIAL =================
+function renderTrabajoListCard(t){
+  const cliente = t.clienteId ? clienteById(t.clienteId) : null;
+  const nombrePaciente = (t.datosPaciente&&t.datosPaciente.nombre) || (t.informacionGeneral&&t.informacionGeneral.paciente&&t.informacionGeneral.paciente.nombre) || '';
+  return `<div class="listcard" onclick="verOEditarTrabajo('${t.id}')">
+    <div class="top"><div class="name">${cliente?escapeHtml(clienteNombreCompleto(cliente)):'Sin cliente'}</div><div class="date">${fmtFecha(t.fechaInicio)}</div></div>
+    <div class="meta">${t.especie}${nombrePaciente?' · '+escapeHtml(nombrePaciente):''}</div>
+    <span class="tag ${t.estado==='finalizado'?'finalizado':'parcial'}">${t.estado==='finalizado'?'Finalizado':'En curso'}</span>
+  </div>`;
+}
+function verOEditarTrabajo(id){
+  const t = trabajos.find(x=>x.id===id);
+  if(t.estado==='parcial'){ retomarTrabajo(id); }
+  else { editingId = id; navigate('trabajoDetalle'); }
+}
+let historialModo = null; // 'rapida' | 'avanzada'
+function viewHistorial(){
+  if(historialModo==='rapida') return viewHistorialRapida();
+  if(historialModo==='avanzada') return viewHistorialAvanzada();
+  return `
+    <div class="sectiontitle">Historial</div>
+    <div class="fieldnote" style="margin-bottom:12px;">Buscá cualquier dato que hayas cargado: caravanas, clientes, establecimientos, resultados de exámenes, lo que sea.</div>
+    <div class="catlist">
+      <div class="cattile" onclick="historialModo='rapida'; render()">
+        <div class="left"><span class="emoji">🔍</span><span class="lab">Búsqueda rápida</span></div>
+      </div>
+      <div class="cattile" onclick="historialModo='avanzada'; render()">
+        <div class="left"><span class="emoji">🧭</span><span class="lab">Búsqueda avanzada</span></div>
+      </div>
+    </div>
+  `;
+}
+
+// --- Búsqueda profunda: recorre todo el trabajo (y el cliente asociado) buscando el texto ---
+function textoIndexable(obj, profundidad){
+  profundidad = profundidad || 0;
+  if(obj==null || profundidad>8) return '';
+  if(typeof obj==='string') return obj;
+  if(typeof obj==='number') return String(obj);
+  if(Array.isArray(obj)) return obj.map(o=>textoIndexable(o,profundidad+1)).join(' ');
+  if(typeof obj==='object'){
+    return Object.entries(obj).filter(([k])=>k!=='fotos').map(([,v])=>textoIndexable(v,profundidad+1)).join(' ');
+  }
+  return '';
+}
+function trabajoMatchesQuery(t, q){
+  const cliente = t.clienteId ? clienteById(t.clienteId) : null;
+  let texto = textoIndexable(t);
+  if(cliente) texto += ' ' + textoIndexable(cliente);
+  return texto.toLowerCase().includes(q.toLowerCase());
+}
+function renderResultadosHistorial(resultados){
+  if(!resultados.length) return '<div class="empty">No se encontraron resultados.</div>';
+  return `<div class="sectiontitle">${resultados.length} resultado${resultados.length===1?'':'s'}</div>` + resultados.map(renderTrabajoListCard).join('');
+}
+
+// --- Búsqueda rápida ---
+function viewHistorialRapida(){
+  return `
+    <button class="backbtn" onclick="historialModo=null; render()">‹ Historial</button>
+    <div class="sectiontitle">Búsqueda rápida</div>
+    <input class="searchbar" id="hist_rapida_q" placeholder="Caravana, cliente, establecimiento, cualquier dato...">
+    <button class="btn btn-teal" onclick="ejecutarBusquedaRapida()">Buscar</button>
+    <div id="histRapidaResultados"></div>
+  `;
+}
+function ejecutarBusquedaRapida(){
+  const q = document.getElementById('hist_rapida_q').value.trim();
+  const cont = document.getElementById('histRapidaResultados');
+  if(!q){ cont.innerHTML = '<div class="empty">Escribí algo para buscar.</div>'; return; }
+  const resultados = trabajos.filter(t=>trabajoMatchesQuery(t,q)).sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''));
+  cont.innerHTML = renderResultadosHistorial(resultados);
+}
+
+// --- Búsqueda avanzada ---
+function viewHistorialAvanzada(){
+  return `
+    <button class="backbtn" onclick="historialModo=null; render()">‹ Historial</button>
+    <div class="sectiontitle">Búsqueda avanzada</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Ningún campo es obligatorio. Completá los que te sirvan.</div>
+    <label>Cliente</label>
+    <input type="text" id="hist_av_cliente" placeholder="Nombre del cliente">
+    <label>Establecimiento</label>
+    <input type="text" id="hist_av_establecimiento" placeholder="Nombre del establecimiento">
+    <label>RENSPA</label>
+    <input type="text" id="hist_av_renspa" placeholder="RENSPA">
+    <label>Especie</label>
+    <select id="hist_av_especie">
+      <option value="">Todas</option>
+      <option>Equino</option><option>Bovino</option><option>Canino</option><option>Felino</option><option>Otros</option>
+    </select>
+    <label>Fecha (desde)</label>
+    <input type="date" id="hist_av_fecha">
+    <div class="fieldnote">Trae todo lo cargado desde esa fecha en adelante.</div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="ejecutarBusquedaAvanzada()">Buscar</button>
+    <div id="histAvanzadaResultados"></div>
+  `;
+}
+function ejecutarBusquedaAvanzada(){
+  const clienteQ = document.getElementById('hist_av_cliente').value.trim().toLowerCase();
+  const estabQ = document.getElementById('hist_av_establecimiento').value.trim().toLowerCase();
+  const renspaQ = document.getElementById('hist_av_renspa').value.trim().toLowerCase();
+  const especieQ = document.getElementById('hist_av_especie').value;
+  const fechaQ = document.getElementById('hist_av_fecha').value;
+  let resultados = trabajos.filter(t=>{
+    if(especieQ && t.especie!==especieQ) return false;
+    if(fechaQ && (!t.fechaInicio || t.fechaInicio < fechaQ)) return false;
+    const cliente = t.clienteId ? clienteById(t.clienteId) : null;
+    if(clienteQ && !(cliente && clienteNombreCompleto(cliente).toLowerCase().includes(clienteQ))) return false;
+    if(estabQ){
+      const estabs = (cliente&&cliente.establecimientos)||[];
+      if(!estabs.some(e=>(e.nombre||'').toLowerCase().includes(estabQ))) return false;
+    }
+    if(renspaQ){
+      const estabs = (cliente&&cliente.establecimientos)||[];
+      if(!estabs.some(e=>(e.renspa||'').toLowerCase().includes(renspaQ))) return false;
+    }
+    return true;
+  }).sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''));
+  document.getElementById('histAvanzadaResultados').innerHTML = renderResultadosHistorial(resultados);
+}
+function viewTrabajoDetalle(){
+  const t = trabajos.find(x=>x.id===editingId);
+  if(!t) return '<div class="empty">Este registro ya no existe.</div>';
+  const cliente = t.clienteId ? clienteById(t.clienteId) : null;
+  return `
+    <button class="backbtn" onclick="navigate('historial')">‹ Historial</button>
+    <div class="sectiontitle">${cliente?escapeHtml(clienteNombreCompleto(cliente)):'Sin cliente'} · ${fmtFecha(t.fechaInicio)}</div>
+    <div class="reportbox">${escapeHtml(resumenTrabajo(t))}</div>
+    <button class="btn btn-outline" onclick="retomarTrabajo('${t.id}')">Reabrir y editar</button>
+  `;
+}
+function campoResumen(v){
+  if(!v) return '';
+  if(typeof v==='string') return v;
+  let s = v.texto||'';
+  if(v.fotos && v.fotos.length) s += ` [${v.fotos.length} foto${v.fotos.length===1?'':'s'}]`;
+  return s;
+}
+function resumenTrabajo(t){
+  if(t.especie==='Bovino') return resumenTrabajoBovino(t);
+  if(t.especie==='Canino'||t.especie==='Felino'||t.especie==='Otros') return resumenTrabajoMascota(t);
+  let out = `Especie: ${t.especie}\nEstado: ${t.estado}\n`;
+  if(t.datosPaciente && hasData(t.datosPaciente)) out += `\nPaciente: ${t.datosPaciente.nombre||'—'} · ${t.datosPaciente.pelaje||''} · ${t.datosPaciente.edad||''} · ${t.datosPaciente.sexo||''}\n`;
+  if(t.exploracionClinica && hasData(t.exploracionClinica)){
+    out += `\nExploración clínica:\n`;
+    if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
+    if(t.exploracionClinica.condicionCorporal) out += `  Condición corporal: ${t.exploracionClinica.condicionCorporal}\n`;
+    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+  }
+  if(t.exploracionReproductiva && hasData(t.exploracionReproductiva)){
+    const r = t.exploracionReproductiva;
+    out += `\nExploración reproductiva: ${r.estadoGestacional||''}\n`;
+    if(r.observaciones) out += `  Observaciones: ${r.observaciones}\n`;
+    if(r.edadGestacional) out += `  Edad gestacional: ${r.edadGestacional}\n`;
+    if(r.examenReproductivo) out += `  Examen: ${r.examenReproductivo}\n`;
+  }
+  if(t.examenesComplementarios && hasData(t.examenesComplementarios)){
+    out += `\nExámenes complementarios:\n`;
+    const etiquetasComp = {radiografia:'radiografía', ecografia:'ecografía', sangrado:'análisis de sangre', otros:'otros'};
+    ['radiografia','ecografia','sangrado','otros'].forEach(k=>{ if(hasData(t.examenesComplementarios[k])) out += `  ${etiquetasComp[k]}: ${campoResumen(t.examenesComplementarios[k])}\n`; });
+    const sm = t.examenesComplementarios.sangradoMasivo;
+    if(sm && sm.tubos && sm.tubos.length) out += `  Análisis de sangre grupal: ${sm.tubos.length} animales\n`;
+  }
+  if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
+    out += `\nProcedimientos quirúrgicos:\n`;
+    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+  }
+  if(hasData(t.tratamiento)) out += `\nTratamiento: ${campoResumen(t.tratamiento)}\n`;
+  if(t.sanidad && hasData(t.sanidad)){
+    out += `\nSanidad:\n`;
+    VACUNAS.forEach(v=>{ if(t.sanidad[v.key]) out += `  ${v.label}: aplicada ${fmtFecha(t.sanidad[v.key].fecha)}, próxima ${fmtFecha(t.sanidad[v.key].proxima)}${t.sanidad[v.key].observaciones?' — '+t.sanidad[v.key].observaciones:''}\n`; });
+    if(t.sanidad.sanidadMasiva && t.sanidad.sanidadMasiva.filas && t.sanidad.sanidadMasiva.filas.length) out += `  Sanidad masiva: ${t.sanidad.sanidadMasiva.filas.length} animales\n`;
+  }
+  if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
+  return out;
+}
+function resumenTrabajoBovino(t){
+  let out = `Especie: Bovino\nEstado: ${t.estado}\n`;
+  if(t.registro && t.registro.caravana) out += `\nCaravana de registro: ${t.registro.caravana}\n`;
+  if(t.exploracionClinica && hasData(t.exploracionClinica)){
+    out += `\nExploración clínica:\n`;
+    if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
+    if(t.exploracionClinica.condicionCorporal) out += `  Condición corporal: ${t.exploracionClinica.condicionCorporal}\n`;
+    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+  }
+  if(t.exploracionReproductiva && hasData(t.exploracionReproductiva)){
+    const r = t.exploracionReproductiva;
+    out += `\nExploración reproductiva:\n`;
+    const dg = r.diagnosticoGestacion;
+    if(dg && dg.registros && dg.registros.length){
+      const pren = dg.registros.filter(x=>x.resultado==='Preñada').length;
+      const vac = dg.registros.filter(x=>x.resultado==='Vacía').length;
+      out += `  Diagnóstico de gestación: ${dg.registros.length} animales (${pren} preñadas, ${vac} vacías)\n`;
+      if(dg.comentario) out += `    Comentario: ${dg.comentario}\n`;
+    }
+    if(r.preservicio && r.preservicio.registros && r.preservicio.registros.length) out += `  Preservicio: ${r.preservicio.registros.length} animales\n`;
+    if(r.servicio){
+      if(r.servicio.iatf && r.servicio.iatf.length) out += `  Servicio IATF: ${r.servicio.iatf.length} animales\n`;
+      if(r.servicio.natural) out += `  Servicio natural: ${r.servicio.natural}\n`;
+    }
+    if(r.examenGinecologico && r.examenGinecologico.registros && r.examenGinecologico.registros.length) out += `  Examen ginecológico: ${r.examenGinecologico.registros.length} animales\n`;
+    if(r.observacion) out += `  Observación general: ${r.observacion}\n`;
+  }
+  if(t.examenAndrologico && hasData(t.examenAndrologico)){
+    const a = t.examenAndrologico;
+    out += `\nExamen andrológico: caravana ${a.caravana||'—'}, raza ${a.raza||'—'}, edad ${a.edad||'—'}\n`;
+    if(a.locomotor) out += `  Ap. locomotor: ${a.locomotor}\n`;
+    if(a.vision) out += `  Ap. visión: ${a.vision}\n`;
+    if(a.tonoTesticular) out += `  Tono testicular: ${a.tonoTesticular}\n`;
+    if(hasData(a.circunferencia)) out += `  Circunferencia escrotal: ${campoResumen(a.circunferencia)}\n`;
+    if(hasData(a.ecografia)) out += `  Ecografía testicular: ${campoResumen(a.ecografia)}\n`;
+    if(hasData(a.calidadSeminal)) out += `  Calidad seminal: ${campoResumen(a.calidadSeminal)}\n`;
+  }
+  if(t.examenesComplementarios && hasData(t.examenesComplementarios)){
+    const ex = t.examenesComplementarios;
+    out += `\nExámenes complementarios:\n`;
+    if(ex.datosAnimal && ex.datosAnimal.caravana) out += `  Caravana: ${ex.datosAnimal.caravana}\n`;
+    const etiquetasCompB = {ecografia:'ecografía', radiografia:'radiografía', sangrado:'análisis de sangre', otro:'otro'};
+    ['ecografia','radiografia','sangrado','otro'].forEach(k=>{ if(hasData(ex[k])) out += `  ${etiquetasCompB[k]}: ${campoResumen(ex[k])}\n`; });
+    if(ex.sangradoMasivo && ex.sangradoMasivo.tubos && ex.sangradoMasivo.tubos.length) out += `  Análisis de sangre grupal: ${ex.sangradoMasivo.tubos.length} animales\n`;
+  }
+  if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
+    out += `\nProcedimientos quirúrgicos:\n`;
+    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(v && v.texto) out += `  ${k} (caravana ${v.caravana||'—'}): ${campoResumen(v)}\n`; });
+  }
+  if(t.tratamiento && hasData(t.tratamiento)){
+    out += `\nTratamiento:\n`;
+    if(hasData(t.tratamiento.individual)) out += `  Individual: ${campoResumen(t.tratamiento.individual)}\n`;
+    if(t.tratamiento.masivo && t.tratamiento.masivo.filas && t.tratamiento.masivo.filas.length) out += `  Masivo: ${t.tratamiento.masivo.filas.length} animales\n`;
+  }
+  if(t.sanidad && hasData(t.sanidad)){
+    out += `\nSanidad:\n`;
+    if(t.sanidad.individual) Object.entries(t.sanidad.individual).forEach(([k,v])=>{ if(hasData(v)) out += `  Individual - ${k}: ${campoResumen(v)}\n`; });
+    if(t.sanidad.masivo) Object.entries(t.sanidad.masivo).forEach(([k,v])=>{ if(v && v.filas && v.filas.length) out += `  Masivo - ${k}: ${v.filas.length} animales\n`; });
+  }
+  if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
+  return out;
+}
+
+// ================= INFORMES =================
+let informesModo = null, informesBusquedaModo = null, informeVerId = null;
+
+function viewInformes(){
+  if(informesModo && !informesBusquedaModo) return viewInformesBusquedaMenu();
+  if(informesModo && informesBusquedaModo==='rapida') return viewInformesRapida();
+  if(informesModo && informesBusquedaModo==='avanzada') return viewInformesAvanzada();
+  return `
+    <div class="sectiontitle">Informes</div>
+    <div class="catlist">
+      <div class="cattile" onclick="informesModo='finalizados'; render()"><div class="left"><span class="emoji">✅</span><span class="lab">Finalizados</span></div></div>
+      <div class="cattile" onclick="informesModo='encurso'; render()"><div class="left"><span class="emoji">🕓</span><span class="lab">En curso</span></div></div>
+    </div>
+  `;
+}
+function viewInformesBusquedaMenu(){
+  return `
+    <button class="backbtn" onclick="informesModo=null; render()">‹ Informes</button>
+    <div class="sectiontitle">${informesModo==='finalizados'?'Finalizados':'En curso'}</div>
+    <div class="twobtn">
+      <button class="btn btn-outline" onclick="informesBusquedaModo='rapida'; render()">🔍 Búsqueda rápida</button>
+      <button class="btn btn-teal" onclick="informesBusquedaModo='avanzada'; render()">🧭 Búsqueda avanzada</button>
+    </div>
+  `;
+}
+function volverInformesBusqueda(){ informesBusquedaModo=null; render(); }
+function estadoInformes(){ return informesModo==='finalizados' ? 'finalizado' : 'parcial'; }
+
+function viewInformesRapida(){
+  return `
+    <button class="backbtn" onclick="volverInformesBusqueda()">‹ ${informesModo==='finalizados'?'Finalizados':'En curso'}</button>
+    <div class="sectiontitle">Búsqueda rápida</div>
+    <input class="searchbar" id="inf_rapida_q" placeholder="Caravana, cliente, cualquier dato... (vacío = todos)">
+    <button class="btn btn-teal" onclick="ejecutarBusquedaInformesRapida()">Buscar</button>
+    <div id="infRapidaResultados"></div>
+  `;
+}
+function ejecutarBusquedaInformesRapida(){
+  const q = document.getElementById('inf_rapida_q').value.trim();
+  const cont = document.getElementById('infRapidaResultados');
+  const base = trabajos.filter(t=>t.estado===estadoInformes());
+  const resultados = (q ? base.filter(t=>trabajoMatchesQuery(t,q)) : base).sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''));
+  cont.innerHTML = renderResultadosInformes(resultados);
+}
+function viewInformesAvanzada(){
+  return `
+    <button class="backbtn" onclick="volverInformesBusqueda()">‹ ${informesModo==='finalizados'?'Finalizados':'En curso'}</button>
+    <div class="sectiontitle">Búsqueda avanzada</div>
+    <label>Cliente</label>
+    <input type="text" id="inf_av_cliente" placeholder="Nombre del cliente">
+    <label>Especie</label>
+    <select id="inf_av_especie">
+      <option value="">Todas</option>
+      <option>Equino</option><option>Bovino</option><option>Canino</option><option>Felino</option><option>Otros</option>
+    </select>
+    <label>Fecha (desde)</label>
+    <input type="date" id="inf_av_fecha">
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="ejecutarBusquedaInformesAvanzada()">Buscar</button>
+    <div id="infAvanzadaResultados"></div>
+  `;
+}
+function ejecutarBusquedaInformesAvanzada(){
+  const clienteQ = document.getElementById('inf_av_cliente').value.trim().toLowerCase();
+  const especieQ = document.getElementById('inf_av_especie').value;
+  const fechaQ = document.getElementById('inf_av_fecha').value;
+  const resultados = trabajos.filter(t=>{
+    if(t.estado!==estadoInformes()) return false;
+    if(especieQ && t.especie!==especieQ) return false;
+    if(fechaQ && (!t.fechaInicio || t.fechaInicio<fechaQ)) return false;
+    if(clienteQ){
+      const cliente = t.clienteId?clienteById(t.clienteId):null;
+      if(!(cliente && clienteNombreCompleto(cliente).toLowerCase().includes(clienteQ))) return false;
+    }
+    return true;
+  }).sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''));
+  document.getElementById('infAvanzadaResultados').innerHTML = renderResultadosInformes(resultados);
+}
+function renderResultadosInformes(resultados){
+  if(!resultados.length) return '<div class="empty">No se encontraron resultados.</div>';
+  return `<div class="sectiontitle">${resultados.length} resultado${resultados.length===1?'':'s'}</div>` + resultados.map(renderInformeListCard).join('');
+}
+function renderInformeListCard(t){
+  const cliente = t.clienteId?clienteById(t.clienteId):null;
+  const nombrePaciente = (t.datosPaciente&&t.datosPaciente.nombre)||(t.informacionGeneral&&t.informacionGeneral.paciente&&t.informacionGeneral.paciente.nombre)||'';
+  if(t.estado==='finalizado'){
+    return `<div class="listcard" style="cursor:default;">
+      <div onclick="abrirInformeCompleto('${t.id}')" style="cursor:pointer;">
+        <div class="top"><div class="name">${cliente?escapeHtml(clienteNombreCompleto(cliente)):'Sin cliente'}</div><div class="date">${fmtFecha(t.fechaInicio)}</div></div>
+        <div class="meta">${t.especie}${nombrePaciente?' · '+escapeHtml(nombrePaciente):''}</div>
+      </div>
+      <div class="facturacionRow">
+        <button class="factbtn ${t.facturado?'on':''}" onclick="toggleFacturado('${t.id}', this)">${t.facturado?'✓ ':''}Facturado</button>
+        <button class="factbtn ${t.cobrado?'on':''}" onclick="toggleCobrado('${t.id}', this)">${t.cobrado?'✓ ':''}Cobrado</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="listcard" onclick="retomarTrabajo('${t.id}')">
+    <div class="top"><div class="name">${cliente?escapeHtml(clienteNombreCompleto(cliente)):'Sin cliente'}</div><div class="date">${fmtFecha(t.fechaInicio)}</div></div>
+    <div class="meta">${t.especie}${nombrePaciente?' · '+escapeHtml(nombrePaciente):''}</div>
+    <span class="tag parcial">En curso · tocá para continuar</span>
+  </div>`;
+}
+function toggleFacturado(id, btn){
+  const t=trabajos.find(x=>x.id===id); if(!t) return;
+  t.facturado=!t.facturado; updateTrabajoDoc(id, {facturado:t.facturado});
+  btn.classList.toggle('on', t.facturado);
+  btn.textContent = (t.facturado?'✓ ':'')+'Facturado';
+}
+function toggleCobrado(id, btn){
+  const t=trabajos.find(x=>x.id===id); if(!t) return;
+  t.cobrado=!t.cobrado; updateTrabajoDoc(id, {cobrado:t.cobrado});
+  btn.classList.toggle('on', t.cobrado);
+  btn.textContent = (t.cobrado?'✓ ':'')+'Cobrado';
+}
+
+// --- Informe completo (vista de lectura, rica) ---
+function abrirInformeCompleto(id){ informeVerId=id; navigate('informe-ver'); }
+function viewInformeCompleto(){
+  const t = trabajos.find(x=>x.id===informeVerId);
+  if(!t) return '<div class="empty">Este informe ya no existe.</div>';
+  const cliente = t.clienteId?clienteById(t.clienteId):null;
+  return `
+    <button class="backbtn" onclick="informeVerId=null; navigate('informes')">‹ Volver</button>
+    <div class="reportbox">${renderInformeHTML(t,cliente)}</div>
+    <div class="facturacionRow" style="margin-top:14px;">
+      <button class="factbtn ${t.facturado?'on':''}" onclick="toggleFacturado('${t.id}', this)">${t.facturado?'✓ ':''}Facturado</button>
+      <button class="factbtn ${t.cobrado?'on':''}" onclick="toggleCobrado('${t.id}', this)">${t.cobrado?'✓ ':''}Cobrado</button>
+    </div>
+    <button class="btn btn-outline" onclick="retomarTrabajo('${t.id}')">Reabrir y editar</button>
+    <button class="btn btn-teal" onclick="compartirWhatsapp('${t.id}')">Compartir por WhatsApp</button>
+    <button class="btn btn-teal" onclick="compartirMail('${t.id}')">Compartir por mail</button>
+    <button class="btn btn-outline" onclick="copiarInformeTexto('${t.id}')">Copiar texto</button>
+    <button class="btn btn-outline" onclick="window.print()">Imprimir / Guardar como PDF</button>
+    <button class="btn btn-danger" onclick="eliminarInforme('${t.id}')">Eliminar informe</button>
+  `;
+}
+function recolectarFotos(obj, acc){
+  acc = acc || [];
+  if(!obj) return acc;
+  if(Array.isArray(obj)){ obj.forEach(o=>recolectarFotos(o,acc)); return acc; }
+  if(typeof obj==='object'){
+    if(Array.isArray(obj.fotos)) acc.push(...obj.fotos);
+    Object.entries(obj).forEach(([k,v])=>{ if(k!=='fotos') recolectarFotos(v,acc); });
+  }
+  return acc;
+}
+function renderInformeHTML(t, cliente){
+  let html = '';
+  html += `<div style="margin-bottom:14px;"><b style="font-size:15px;">${cliente?escapeHtml(clienteNombreCompleto(cliente)):'Sin cliente asociado'}</b>`;
+  if(cliente && cliente.establecimientos && cliente.establecimientos.length){
+    const estab = t.establecimientoId ? cliente.establecimientos.find(e=>e.id===t.establecimientoId) : null;
+    if(estab){
+      html += `<div class="fieldnote">${escapeHtml(estab.nombre)}${estab.renspa?' · RENSPA '+escapeHtml(estab.renspa):''}${estab.ubicacion?' · '+escapeHtml(estab.ubicacion):''}</div>`;
+    } else {
+      html += `<div class="fieldnote">${cliente.establecimientos.map(e=>escapeHtml(e.nombre)).join(' · ')}</div>`;
+    }
+  }
+  html += `<div class="fieldnote">${fmtFecha(t.fechaInicio)} · ${t.especie} · ${t.estado==='finalizado'?'Finalizado':'En curso'}</div></div>`;
+
+  if(t.especie==='Bovino' && t.exploracionReproductiva && t.exploracionReproductiva.diagnosticoGestacion){
+    const regs = t.exploracionReproductiva.diagnosticoGestacion.registros||[];
+    if(regs.length){
+      const pren = regs.filter(x=>x.resultado==='Preñada').length;
+      const vac = regs.filter(x=>x.resultado==='Vacía').length;
+      const pct = Math.round((pren/regs.length)*100);
+      const cab = regs.filter(x=>x.subresultado==='Cabeza').length;
+      const cue = regs.filter(x=>x.subresultado==='Cuerpo').length;
+      const col = regs.filter(x=>x.subresultado==='Cola').length;
+      html += `<div style="margin-bottom:16px;">
+        <b>Diagnóstico de gestación — ${regs.length} animales</b>
+        <div style="display:flex; height:22px; border-radius:5px; overflow:hidden; margin-top:8px;">
+          <div style="width:${pct}%; background:var(--green);"></div>
+          <div style="width:${100-pct}%; background:var(--line);"></div>
+        </div>
+        <div class="fieldnote">Preñadas: ${pren} (${pct}%) · Vacías: ${vac} (${100-pct}%)</div>
+        ${pren?`<div class="fieldnote">De las preñadas — Cabeza: ${cab} · Cuerpo: ${cue} · Cola: ${col}</div>`:''}
+      </div>`;
+    }
+  }
+
+  html += `<div style="white-space:pre-wrap; font-size:12.5px; line-height:1.6;">${escapeHtml(resumenTrabajo(t))}</div>`;
+
+  const fotos = recolectarFotos(t);
+  if(fotos.length){
+    html += `<div style="margin-top:14px;"><b>Fotos (${fotos.length})</b><div class="fotogrid" style="margin-top:8px;">${fotos.map(f=>`<div class="fotothumb" style="width:80px;height:80px;"><img src="${f}"></div>`).join('')}</div></div>`;
+  }
+  return html;
+}
+function textoCompartible(t){
+  const cliente = t.clienteId?clienteById(t.clienteId):null;
+  return `INFORME VETERINARIO\n${cliente?clienteNombreCompleto(cliente):'Sin cliente'}\n${fmtFecha(t.fechaInicio)} · ${t.especie}\n\n${resumenTrabajo(t)}`;
+}
+function compartirWhatsapp(id){
+  const t = trabajos.find(x=>x.id===id); if(!t) return;
+  window.open(`https://wa.me/?text=${encodeURIComponent(textoCompartible(t))}`, '_blank');
+}
+function compartirMail(id){
+  const t = trabajos.find(x=>x.id===id); if(!t) return;
+  const cliente = t.clienteId?clienteById(t.clienteId):null;
+  const asunto = encodeURIComponent(`Informe veterinario - ${cliente?clienteNombreCompleto(cliente):''} - ${fmtFecha(t.fechaInicio)}`);
+  window.location.href = `mailto:?subject=${asunto}&body=${encodeURIComponent(textoCompartible(t))}`;
+}
+function copiarInformeTexto(id){
+  const t = trabajos.find(x=>x.id===id); if(!t) return;
+  navigator.clipboard.writeText(textoCompartible(t)).then(()=>showToast('Informe copiado')).catch(()=>showToast('No se pudo copiar'));
+}
+function eliminarInforme(id){
+  if(!confirm('¿Eliminar este informe? Esta acción no se puede deshacer.')) return;
+  trabajos = trabajos.filter(t=>t.id!==id);
+  deleteTrabajoDoc(id);
+  informeVerId=null;
+  navigate('informes');
+}
+
+// ---------------- INIT ----------------
+view = 'cargando';
+render();
+fbAuth.onAuthStateChanged(function(user){
+  if(user){
+    auth = {usuario: user.email};
+    sesionActiva = true;
+    attachListeners();
+    navigate('home');
+  } else {
+    auth = null;
+    sesionActiva = false;
+    clientes = []; trabajos = [];
+    detachListeners();
+    navigate('login');
+  }
+});
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(err){ console.warn('SW no registrado', err); });
+  });
+}
+</script>
+</body>
+</html>
