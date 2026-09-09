@@ -47,7 +47,7 @@
   header.topbar .brand span{color:var(--teal);}
   header.topbar .who{font-size:11px; color:var(--ink-soft); text-align:right;}
   .backbtn{background:none; border:none; color:var(--teal); font-size:14.5px; font-weight:700; cursor:pointer; padding:0; margin-bottom:14px;}
-  main{flex:1; padding:18px 18px 40px; display:flex; flex-direction:column;}
+  main{flex:1; padding:18px 18px 78px; display:flex; flex-direction:column;}
 
   /* LOGIN */
   .splash{text-align:center; padding:60px 24px 24px; position:relative;}
@@ -76,10 +76,10 @@
   .btn-danger{background:none; color:var(--red); border:1px solid var(--red);}
 
   /* HOME GRID */
-  .grid2{display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:14px; margin-top:6px; flex:1; min-height:320px;}
-  .tile{border:none; border-radius:16px; padding:22px 16px; text-align:left; cursor:pointer; height:100%; display:flex; flex-direction:column; justify-content:space-between; color:#fff;}
-  .tile .icon{font-size:36px;}
-  .tile .label{font-weight:800; font-size:19px; margin-top:14px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:12px; margin-top:6px; flex:1; min-height:250px; max-height:340px;}
+  .tile{border:none; border-radius:16px; padding:16px 14px; text-align:left; cursor:pointer; height:100%; display:flex; flex-direction:column; justify-content:space-between; color:#fff;}
+  .tile .icon{font-size:28px;}
+  .tile .label{font-weight:800; font-size:16.5px; margin-top:10px;}
   .tile .desc{font-size:12.5px; opacity:0.85; margin-top:3px; line-height:1.35;}
   .tile.teal{background:linear-gradient(160deg, var(--teal), var(--teal-dk));}
   .tile.green{background:linear-gradient(160deg, var(--green), var(--green-dk));}
@@ -159,6 +159,9 @@
   nav.bottomnav button.active .navlab{color:var(--teal);}
 
   .reportbox{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; font-size:12.5px; line-height:1.6; white-space:pre-wrap; margin-top:14px;}
+  .reportWatermark{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.07; text-align:center; pointer-events:none; z-index:0; width:100%;}
+  .reportWatermark img{width:130px; height:130px; display:block; margin:6px auto;}
+  .reportWatermark .wmLine{font-weight:800; font-size:13px; letter-spacing:1.5px; text-transform:uppercase;}
   .toast{position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#000; color:#fff; padding:10px 18px; border-radius:20px; font-size:13px; z-index:30; opacity:0; transition:opacity 0.25s;}
   .toast.show{opacity:0.92;}
   .fieldnote{font-size:11px; color:var(--ink-soft); margin-top:5px; line-height:1.4;}
@@ -584,7 +587,7 @@ function filtrarClientesLive(){
   if(!cont) return;
   const filtrados = clientes.filter(c=>{
     const estabTxt = (c.establecimientos||[]).map(e=>e.nombre+' '+(e.renspa||'')).join(' ').toLowerCase();
-    return clienteNombreCompleto(c).toLowerCase().includes(q) || estabTxt.includes(q) || (c.direccion||'').toLowerCase().includes(q);
+    return clienteNombreCompleto(c).toLowerCase().includes(q) || estabTxt.includes(q) || (c.telefono||'').toLowerCase().includes(q);
   });
   if(!filtrados.length){ cont.innerHTML = `<div class="empty">No hay clientes que coincidan.</div>`; return; }
   cont.innerHTML = filtrados.map(c=>{
@@ -606,7 +609,7 @@ function viewClientePerfil(){
     <button class="backbtn" onclick="navigate('clienteBuscar')">‹ Buscar</button>
     <div class="sectiontitle">${escapeHtml(clienteNombreCompleto(c))}</div>
     <div class="listcard" style="cursor:default;">
-      <div class="meta">${escapeHtml(c.direccion || 'Sin dirección cargada')}</div>
+      <div class="meta">${escapeHtml(c.telefono || 'Sin teléfono cargado')}</div>
       ${(c.establecimientos||[]).map(e=>`
         <div class="estabcard" style="margin-top:10px;">
           <div class="esth"><b>${escapeHtml(e.nombre)}</b></div>
@@ -636,8 +639,8 @@ function viewClienteForm(){
     <input type="text" id="f_nombre" value="${c?escapeHtml(c.nombre||''):''}">
     <label>Apellido</label>
     <input type="text" id="f_apellido" value="${c?escapeHtml(c.apellido||''):''}">
-    <label>Dirección</label>
-    <input type="text" id="f_direccion" value="${c?escapeHtml(c.direccion||''):''}">
+    <label>Teléfono</label>
+    <input type="text" id="f_telefono" value="${c?escapeHtml(c.telefono||''):''}">
     <div class="sectiontitle">Establecimientos</div>
     <div id="establecimientosList"></div>
     <button type="button" class="addestabbtn" onclick="agregarEstablecimiento()">+ Agregar establecimiento</button>
@@ -656,6 +659,7 @@ function renderEstablecimientos(){
         <input type="text" style="font-weight:700; border:none; background:none; padding:0; font-size:13.5px;" value="${escapeHtml(e.nombre)}" onchange="window._establecimientosTmp[${i}].nombre=this.value">
         ${arr.length>1 ? `<button class="removeestab" onclick="quitarEstablecimiento(${i})">Quitar</button>` : ''}
       </div>
+      <div class="fieldnote" style="margin-top:-8px; margin-bottom:8px;">↑ Nombre del establecimiento</div>
       <label style="margin-top:0;">RENSPA</label>
       <input type="text" value="${escapeHtml(e.renspa)}" onchange="window._establecimientosTmp[${i}].renspa=this.value">
       <label>Ubicación</label>
@@ -672,7 +676,7 @@ function guardarCliente(irANuevoTrabajo){
   const data = {
     nombre: document.getElementById('f_nombre').value.trim(),
     apellido: document.getElementById('f_apellido').value.trim(),
-    direccion: document.getElementById('f_direccion').value.trim(),
+    telefono: document.getElementById('f_telefono').value.trim(),
     establecimientos: window._establecimientosTmp,
   };
   let id = editingId;
@@ -741,7 +745,7 @@ function iniciarEquino(){
     facturado:false, cobrado:false,
     datosPaciente: {}, exploracionClinica:{examenClinico:{}}, exploracionReproductiva:{},
     examenesComplementarios:{sangradoMasivo:{tubos:[], observaciones:''}},
-    procedimientosQuirurgicos:{}, tratamiento:{texto:'',fotos:[]}, sanidad:{sanidadMasiva:{filas:[]}}, otroProcedimiento:{texto:'',fotos:[]}
+    procedimientosQuirurgicos:{}, tratamiento:{texto:'',fotos:[]}, sanidad:{sanidadMasiva:{filas:[]}}, otroProcedimiento:{texto:'',fotos:[]}, observacionesFinales:{texto:'',fotos:[]}
   };
   navigate('equinoCategorias');
 }
@@ -762,7 +766,8 @@ function iniciarBovino(){
     procedimientosQuirurgicos: {},
     tratamiento: {individual:{texto:'',fotos:[]}, masivo:{filas:[], observaciones:''}},
     sanidad: {individual:{vacunacion:{texto:'',fotos:[]},desparasitacion:{texto:'',fotos:[]},otra:{texto:'',fotos:[]}}, masivo:{vacunacion:{filas:[],observaciones:''}, desparasitacion:{filas:[],observaciones:''}, otra:{filas:[],observaciones:''}}},
-    otroProcedimiento: {texto:'', fotos:[]}
+    otroProcedimiento: {texto:'', fotos:[]},
+    observacionesFinales: {texto:'', fotos:[]}
   };
   navigate('bovinoCategorias');
 }
@@ -772,6 +777,13 @@ function retomarTrabajo(id){
   trabajoActual = JSON.parse(JSON.stringify(t));
   const prefix = especiePrefix();
   navigate(prefix==='mascota' ? 'mascotaCategorias' : prefix+'Categorias');
+}
+function rangoTemperatura(especie){
+  if(especie==='Equino') return '37,5 – 38,4 °C';
+  if(especie==='Bovino') return '37,5 – 39 °C';
+  if(especie==='Canino') return '38 – 39 °C';
+  if(especie==='Felino') return '38 – 39 °C';
+  return null;
 }
 function especiePrefix(){
   if(trabajoActual.especie==='Bovino') return 'bovino';
@@ -808,6 +820,7 @@ function viewEquinoCategorias(){
     {id:'tratamiento', emoji:'💉', lab:'Tratamiento', has: hasData(t.tratamiento)},
     {id:'sanidad', emoji:'💉', lab:'Sanidad', has: hasData(t.sanidad)},
     {id:'otro', emoji:'➕', lab:'Otro procedimiento', has: hasData(t.otroProcedimiento)},
+    {id:'observaciones', emoji:'📝', lab:'Observaciones', has: hasData(t.observacionesFinales)},
   ];
   return `
     <button class="backbtn" onclick="salirDeTrabajo()">‹ Salir sin continuar</button>
@@ -842,7 +855,14 @@ function viewEquinoCategoria(cat){
   if(cat==='tratamiento') return catTratamiento();
   if(cat==='sanidad') return catSanidad();
   if(cat==='otro') return catOtro();
+  if(cat==='observaciones') return catObservaciones();
   return '';
+}
+function botonGuardarSimple(saveFn){
+  return `
+    <div style="margin-top:22px;">
+      <button class="btn btn-teal" onclick="window['${saveFn}']('parcial')">Guardar y volver a categorías</button>
+    </div>`;
 }
 function botonesGuardar(saveFn, cancelFnName){
   const cancel = cancelFnName || 'cancelarCategorias';
@@ -886,7 +906,7 @@ function catPaciente(){
     <select id="p_sexo">
       ${['','Macho','Hembra','Castrado'].map(s=>`<option ${p.sexo===s?'selected':''}>${s}</option>`).join('')}
     </select>
-    ${botonesGuardar('guardarPaciente')}
+    ${botonGuardarSimple('guardarPaciente')}
   `;
 }
 function guardarPaciente(estado){
@@ -931,6 +951,8 @@ function catClinica(){
     <div class="optrow">
       ${['Regular','Buena','Mala'].map(o=>`<div class="optbtn ${e.condicionCorporal===o?'selected':''}" onclick="setClinica('condicionCorporal','${o}')">${o}</div>`).join('')}
     </div>
+    <div class="sectiontitle">Temperatura corporal${rangoTemperatura(trabajoActual.especie)?` <span style="font-weight:400; color:var(--ink-soft); font-size:12px;">(${rangoTemperatura(trabajoActual.especie)})</span>`:''}</div>
+    <input type="text" id="cl_temperatura" value="${escapeHtml(e.temperatura||'')}" placeholder="°C tomada" onchange="setClinica('temperatura', this.value)">
     <div class="sectiontitle">Examen clínico por sistema</div>
     <div class="sublist">
       ${SISTEMAS.map(s=>`
@@ -938,7 +960,7 @@ function catClinica(){
           <span>${iconoSistema(s)} ${s}</span>${hasData((e.examenClinico||{})[s]) ? '<span class="check">✓</span>' : ''}
         </div>`).join('')}
     </div>
-    ${botonesGuardar('guardarClinicaFinal')}
+    ${botonGuardarSimple('guardarClinicaFinal')}
   `;
 }
 function setClinica(campo, valor){
@@ -973,7 +995,7 @@ function catReproductiva(){
       <input type="text" id="r_edadGestacional" value="${escapeHtml(r.edadGestacional||'')}" placeholder="Ej: 5 meses">` : ''}
     <label>Examen reproductivo</label>
     <textarea id="r_examen" placeholder="Lo que encontrás o evaluás...">${escapeHtml(r.examenReproductivo||'')}</textarea>
-    ${botonesGuardar('guardarRepro')}
+    ${botonGuardarSimple('guardarRepro')}
   `;
 }
 function setRepro(valor){
@@ -1028,7 +1050,7 @@ function catComplementarios(){
       <div class="subtile" onclick="complementarioActivo='sangradoMasivo'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.sangradoMasivo} Análisis de sangre grupal</span>${(ex.sangradoMasivo&&ex.sangradoMasivo.tubos&&ex.sangradoMasivo.tubos.length)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="complementarioActivo='otros'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.otros} Otros</span>${hasData(ex.otros)?'<span class="check">✓</span>':''}</div>
     </div>
-    ${botonesGuardar('guardarComplementariosFinal')}
+    ${botonGuardarSimple('guardarComplementariosFinal')}
   `;
 }
 function guardarComplementarioSimple(){
@@ -1088,7 +1110,7 @@ function catQuirurgicos(){
           <span>${iconoSistema(s)} ${s}</span>${hasData(q[s]) ? '<span class="check">✓</span>' : ''}
         </div>`).join('')}
     </div>
-    ${botonesGuardar('guardarQuirurgicosFinal')}
+    ${botonGuardarSimple('guardarQuirurgicosFinal')}
   `;
 }
 function guardarSistemaQuirurgico(){
@@ -1109,7 +1131,7 @@ function catTratamiento(){
     <div class="sectiontitle">Tratamiento</div>
     <textarea id="tr_texto" placeholder="Qué se aplicó, para qué, cuándo toca repetir...">${escapeHtml(dato.texto||'')}</textarea>
     ${fotosBlock(dato.fotos, ['tratamiento'])}
-    ${botonesGuardar('guardarTratamiento')}
+    ${botonGuardarSimple('guardarTratamiento')}
   `;
 }
 function guardarTratamiento(estado){
@@ -1151,7 +1173,7 @@ function catSanidad(){
     <div class="listcard" onclick="sanidadMasivaActiva=true; navigate('equino-sanidad')">
       <div class="meta">${(s.sanidadMasiva&&s.sanidadMasiva.filas&&s.sanidadMasiva.filas.length) ? s.sanidadMasiva.filas.length+' animales cargados' : 'Cargar animales vacunados en lote'}</div>
     </div>
-    ${botonesGuardar('guardarSanidadFinal')}
+    ${botonGuardarSimple('guardarSanidadFinal')}
   `;
 }
 function actualizarObsVacuna(key, valor){
@@ -1198,13 +1220,33 @@ function catOtro(){
     <div class="sectiontitle">Otro procedimiento</div>
     <textarea id="otro_texto" placeholder="Algo esporádico que no entra en las demás categorías...">${escapeHtml(dato.texto||'')}</textarea>
     ${fotosBlock(dato.fotos, ['otroProcedimiento'])}
-    ${botonesGuardar('guardarOtro')}
+    ${botonGuardarSimple('guardarOtro')}
   `;
 }
 function guardarOtro(estado){
   const actual = trabajoActual.otroProcedimiento || {texto:'', fotos:[]};
   actual.texto = document.getElementById('otro_texto').value.trim();
   trabajoActual.otroProcedimiento = actual;
+  finalizarGuardado(estado);
+}
+
+// --- Observaciones (cierre del trabajo) ---
+function catObservaciones(){
+  const dato = trabajoActual.observacionesFinales || {texto:'', fotos:[]};
+  return `
+    <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Observaciones</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Espacio para agregar algo más sobre este trabajo, por fuera de cada sistema o categoría.</div>
+    <textarea id="obs_texto" placeholder="Observaciones generales...">${escapeHtml(dato.texto||'')}</textarea>
+    ${fotosBlock(dato.fotos, ['observacionesFinales'])}
+    <div class="fieldnote" style="margin-top:10px;">Cuando termines este trabajo, elegí una de estas opciones:</div>
+    ${botonesGuardar('guardarObservacionesFinal')}
+  `;
+}
+function guardarObservacionesFinal(estado){
+  const actual = trabajoActual.observacionesFinales || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('obs_texto').value.trim();
+  trabajoActual.observacionesFinales = actual;
   finalizarGuardado(estado);
 }
 
@@ -1224,6 +1266,7 @@ function viewBovinoCategorias(){
     {id:'tratamiento', emoji:'💉', lab:'Tratamiento', has: hasData(t.tratamiento)},
     {id:'sanidad', emoji:'💉', lab:'Sanidad', has: hasData(t.sanidad)},
     {id:'otro', emoji:'➕', lab:'Otro procedimiento', has: hasData(t.otroProcedimiento)},
+    {id:'observaciones', emoji:'📝', lab:'Observaciones', has: hasData(t.observacionesFinales)},
   ];
   return `
     <button class="backbtn" onclick="salirDeTrabajo()">‹ Salir sin continuar</button>
@@ -1250,6 +1293,7 @@ function viewBovinoCategoria(cat){
   if(cat==='tratamiento') return catTratamientoBovino();
   if(cat==='sanidad') return catSanidadBovino();
   if(cat==='otro') return catOtro();
+  if(cat==='observaciones') return catObservaciones();
   return '';
 }
 
@@ -1262,7 +1306,7 @@ function catRegistro(){
     <label>Caravana</label>
     <input type="text" id="reg_caravana" value="${escapeHtml(r.caravana||'')}" placeholder="N° de caravana">
     <button class="btn btn-outline" style="margin-top:8px;" onclick="showToast('El escaneo con bastón lector se suma más adelante')">📡 Escanear chip (próximamente)</button>
-    ${botonesGuardar('guardarRegistro')}
+    ${botonGuardarSimple('guardarRegistro')}
   `;
 }
 function guardarRegistro(estado){
@@ -1288,7 +1332,7 @@ function catReproductivaBovino(){
     </div>
     <label>Observación general</label>
     <textarea id="repro_obs" placeholder="Comentario general sobre la exploración reproductiva...">${escapeHtml(r.observacion||'')}</textarea>
-    ${botonesGuardar('guardarReproductivaBovinoFinal')}
+    ${botonGuardarSimple('guardarReproductivaBovinoFinal')}
   `;
 }
 function guardarReproductivaBovinoFinal(estado){
@@ -1329,7 +1373,7 @@ function subDiagnosticoGestacion(r){
     <button class="btn btn-green" onclick="agregarDiagRegistro()">+ Agregar y siguiente animal</button>
     <label style="margin-top:22px;">Comentario general</label>
     <textarea id="dg_comentario" placeholder="Ej: examen hecho por ultrasonografía...">${escapeHtml(r.diagnosticoGestacion.comentario||'')}</textarea>
-    ${botonesGuardar('guardarDiagGestacionFinal')}
+    ${botonGuardarSimple('guardarDiagGestacionFinal')}
   `;
 }
 function setDiagResultado(v){ window._diagTmp.resultado=v; if(v==='Vacía') window._diagTmp.subresultado=null; render(); }
@@ -1364,7 +1408,7 @@ function subPreservicio(r){
     </div>
     ${p.destino==='Otra' ? `<label>¿A dónde?</label><input type="text" value="${escapeHtml(p.destinoOtro)}" oninput="window._presTmp.destinoOtro=this.value">` : ''}
     <button class="btn btn-green" onclick="agregarPresRegistro()">+ Agregar y siguiente animal</button>
-    ${botonesGuardar('guardarPreservicioFinal')}
+    ${botonGuardarSimple('guardarPreservicioFinal')}
   `;
 }
 function agregarPresRegistro(){
@@ -1409,7 +1453,7 @@ function subServicioIatf(r){
         <div class="meta">Retiro dispositivo: ${fmtFecha(x.retiro)} · IA: ${fmtFecha(x.inseminacion)}</div>
         ${x.queHizo?`<div class="meta">${escapeHtml(x.queHizo)}</div>`:''}
       </div>`).join('')}` : ''}
-    ${botonesGuardar('guardarServicioFinal')}
+    ${botonGuardarSimple('guardarServicioFinal')}
   `;
 }
 function agregarIatfRegistro(){
@@ -1486,7 +1530,7 @@ function catAndrologico(){
     <label>Calidad seminal</label>
     <textarea id="an_calidadSeminal" placeholder="Resultado...">${escapeHtml((a.calidadSeminal||{}).texto||'')}</textarea>
     ${fotosBlock((a.calidadSeminal||{}).fotos, ['examenAndrologico','calidadSeminal'])}
-    ${botonesGuardar('guardarAndrologico')}
+    ${botonGuardarSimple('guardarAndrologico')}
   `;
 }
 function setAndrologico(campo,valor){
@@ -1553,7 +1597,7 @@ function catComplementariosBovino(){
       <div class="subtile" onclick="complementarioActivoBovino='sangradoMasivo'; render()"><span>${COMPLEMENTARIO_ICONOS.sangradoMasivo} Análisis de sangre grupal</span>${(ex.sangradoMasivo&&ex.sangradoMasivo.tubos&&ex.sangradoMasivo.tubos.length)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="complementarioActivoBovino='otro'; render()"><span>${COMPLEMENTARIO_ICONOS.otro} Otro procedimiento</span>${hasData(ex.otro)?'<span class="check">✓</span>':''}</div>
     </div>
-    ${botonesGuardar('guardarComplementariosBovinoFinal')}
+    ${botonGuardarSimple('guardarComplementariosBovinoFinal')}
   `;
 }
 function guardarDatosAnimalComplementario(){
@@ -1611,7 +1655,7 @@ function catQuirurgicosBovino(){
           <span>${iconoSistema(s)} ${s}</span>${q[s]&&q[s].texto ? '<span class="check">✓</span>' : ''}
         </div>`).join('')}
     </div>
-    ${botonesGuardar('guardarQuirurgicosBovinoFinal')}
+    ${botonGuardarSimple('guardarQuirurgicosBovinoFinal')}
   `;
 }
 function guardarSistemaQuirurgicoBovino(){
@@ -1658,7 +1702,7 @@ function catTratamientoBovino(){
       <div class="subtile" onclick="tratamientoModoBovino='individual'; render()"><span>Individual</span>${hasData(t.individual)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="tratamientoModoBovino='masivo'; render()"><span>Masivo</span>${(t.masivo&&t.masivo.filas&&t.masivo.filas.length)?'<span class="check">✓</span>':''}</div>
     </div>
-    ${botonesGuardar('guardarTratamientoBovinoFinal')}
+    ${botonGuardarSimple('guardarTratamientoBovinoFinal')}
   `;
 }
 function guardarTratamientoIndividualBovino(){
@@ -1733,7 +1777,7 @@ function catSanidadBovino(){
       <div class="subtile" onclick="sanidadModoBovino='individual'; render()"><span>Individual</span></div>
       <div class="subtile" onclick="sanidadModoBovino='masivo'; render()"><span>Masivo</span></div>
     </div>
-    ${botonesGuardar('guardarSanidadBovinoFinal')}
+    ${botonGuardarSimple('guardarSanidadBovinoFinal')}
   `;
 }
 function guardarSanidadIndividualBovino(){
@@ -1796,7 +1840,8 @@ function iniciarMascota(especie){
     procedimientosQuirurgicos: {},
     sanidad: {},
     tratamientos: {texto:'',fotos:[]},
-    otroProcedimiento: {texto:'',fotos:[]}
+    otroProcedimiento: {texto:'',fotos:[]},
+    observacionesFinales: {texto:'',fotos:[]}
   };
   navigate('mascotaCategorias');
 }
@@ -1846,7 +1891,7 @@ function catMascotaGeneral(){
     <label>Raza</label><input type="text" id="mg_raza" value="${escapeHtml(pa.raza||'')}">
     <label>Sexo</label><input type="text" id="mg_sexo" value="${escapeHtml(pa.sexo||'')}">
     <label>Edad</label><input type="text" id="mg_edad" value="${escapeHtml(pa.edad||'')}">
-    ${botonesGuardar('guardarMascotaGeneral')}
+    ${botonGuardarSimple('guardarMascotaGeneral')}
   `;
 }
 function guardarMascotaGeneral(estado){
@@ -1875,6 +1920,7 @@ function catMascotaProcedimientos(){
   if(mascotaProcActivo==='sanidad') return catSanidadMascota();
   if(mascotaProcActivo==='tratamientos') return catTratamientosMascota();
   if(mascotaProcActivo==='otro') return catOtroMascota();
+  if(mascotaProcActivo==='observaciones') return catObservacionesMascota();
   const t = trabajoActual;
   return `
     <button class="backbtn" onclick="navigate('mascotaCategorias')">‹ Categorías</button>
@@ -1886,6 +1932,7 @@ function catMascotaProcedimientos(){
       <div class="cattile" onclick="mascotaSanidadSub=null; mascotaProcActivo='sanidad'; render()"><div class="left"><span class="emoji">💉</span><span class="lab">Sanidad</span></div>${hasData(t.sanidad)?'<span class="check">✓</span>':''}</div>
       <div class="cattile" onclick="mascotaProcActivo='tratamientos'; render()"><div class="left"><span class="emoji">💊</span><span class="lab">Tratamientos</span></div>${hasData(t.tratamientos)?'<span class="check">✓</span>':''}</div>
       <div class="cattile" onclick="mascotaProcActivo='otro'; render()"><div class="left"><span class="emoji">➕</span><span class="lab">Otros procedimientos</span></div>${hasData(t.otroProcedimiento)?'<span class="check">✓</span>':''}</div>
+      <div class="cattile" onclick="mascotaProcActivo='observaciones'; render()"><div class="left"><span class="emoji">📝</span><span class="lab">Observaciones</span></div>${hasData(t.observacionesFinales)?'<span class="check">✓</span>':''}</div>
     </div>
   `;
 }
@@ -1910,11 +1957,13 @@ function catClinicaMascota(){
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${e.estadoGeneral===o?'selected':''}" onclick="setClinicaMascota('estadoGeneral','${o}')">${o}</div>`).join('')}</div>
     <div class="sectiontitle">Condición corporal</div>
     <div class="optrow">${['Regular','Buena','Mala'].map(o=>`<div class="optbtn ${e.condicionCorporal===o?'selected':''}" onclick="setClinicaMascota('condicionCorporal','${o}')">${o}</div>`).join('')}</div>
+    <div class="sectiontitle">Temperatura corporal${rangoTemperatura(trabajoActual.especie)?` <span style="font-weight:400; color:var(--ink-soft); font-size:12px;">(${rangoTemperatura(trabajoActual.especie)})</span>`:''}</div>
+    <input type="text" id="cl_temperatura_m" value="${escapeHtml(e.temperatura||'')}" placeholder="°C tomada" onchange="setClinicaMascota('temperatura', this.value)">
     <div class="sectiontitle">Examen clínico por sistema</div>
     <div class="sublist">
       ${SISTEMAS.map(s=>`<div class="subtile" onclick="mascotaSistemaClinicoActivo='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${hasData((e.examenClinico||{})[s])?'<span class="check">✓</span>':''}</div>`).join('')}
     </div>
-    ${botonesGuardar('guardarClinicaMascotaFinal', 'cancelarMascotaProc')}
+    ${botonGuardarSimple('guardarClinicaMascotaFinal', 'cancelarMascotaProc')}
   `;
 }
 function setClinicaMascota(campo,valor){
@@ -1955,7 +2004,7 @@ function catComplementariosMascota(){
       <div class="subtile" onclick="mascotaComplementarioActivo='sangrado'; render()"><span>${COMPLEMENTARIO_ICONOS.sangrado} Análisis de sangre</span>${hasData(ex.sangrado)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="mascotaComplementarioActivo='otros'; render()"><span>${COMPLEMENTARIO_ICONOS.otros} Otros</span>${hasData(ex.otros)?'<span class="check">✓</span>':''}</div>
     </div>
-    ${botonesGuardar('guardarComplementariosMascotaFinal', 'cancelarMascotaProc')}
+    ${botonGuardarSimple('guardarComplementariosMascotaFinal', 'cancelarMascotaProc')}
   `;
 }
 function guardarComplementarioMascotaSimple(){
@@ -1988,7 +2037,7 @@ function catQuirurgicosMascota(){
     <div class="sublist">
       ${SISTEMAS.map(s=>`<div class="subtile" onclick="mascotaSistemaQuirurgicoActivo='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${hasData(q[s])?'<span class="check">✓</span>':''}</div>`).join('')}
     </div>
-    ${botonesGuardar('guardarQuirurgicosMascotaFinal', 'cancelarMascotaProc')}
+    ${botonGuardarSimple('guardarQuirurgicosMascotaFinal', 'cancelarMascotaProc')}
   `;
 }
 function guardarSistemaQuirurgicoMascota(){
@@ -2015,7 +2064,7 @@ function catSanidadMascota(){
       <div class="subtile" onclick="mascotaSanidadSub='desparasitaciones'; render()"><span>Desparasitaciones</span>${hasData(s.desparasitaciones)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="mascotaSanidadSub='otros'; render()"><span>Otros</span>${hasData(s.otros)?'<span class="check">✓</span>':''}</div>
     </div>
-    ${botonesGuardar('guardarSanidadMascotaFinal', 'cancelarMascotaProc')}
+    ${botonGuardarSimple('guardarSanidadMascotaFinal', 'cancelarMascotaProc')}
   `;
 }
 function subVacunaMascota(s){
@@ -2092,7 +2141,7 @@ function catTratamientosMascota(){
     <div class="sectiontitle">Tratamientos</div>
     <textarea id="trm_texto" placeholder="Qué se aplicó, para qué, cuándo toca repetir...">${escapeHtml(dato.texto||'')}</textarea>
     ${fotosBlock(dato.fotos, ['tratamientos'])}
-    ${botonesGuardar('guardarTratamientosMascotaFinal', 'cancelarMascotaProc')}
+    ${botonGuardarSimple('guardarTratamientosMascotaFinal', 'cancelarMascotaProc')}
   `;
 }
 function guardarTratamientosMascotaFinal(estado){
@@ -2111,7 +2160,7 @@ function catOtroMascota(){
     <div class="sectiontitle">Otros procedimientos</div>
     <textarea id="otm_texto" placeholder="Algo esporádico que no entra en las demás categorías...">${escapeHtml(dato.texto||'')}</textarea>
     ${fotosBlock(dato.fotos, ['otroProcedimiento'])}
-    ${botonesGuardar('guardarOtroMascotaFinal', 'cancelarMascotaProc')}
+    ${botonGuardarSimple('guardarOtroMascotaFinal', 'cancelarMascotaProc')}
   `;
 }
 function guardarOtroMascotaFinal(estado){
@@ -2122,8 +2171,29 @@ function guardarOtroMascotaFinal(estado){
   finalizarGuardadoMascota(estado, 'mascota-procedimientos');
 }
 
+// --- Observaciones (cierre del trabajo) ---
+function catObservacionesMascota(){
+  const dato = trabajoActual.observacionesFinales || {texto:'', fotos:[]};
+  return `
+    <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Observaciones</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Espacio para agregar algo más sobre este trabajo.</div>
+    <textarea id="obsm_texto" placeholder="Observaciones generales...">${escapeHtml(dato.texto||'')}</textarea>
+    ${fotosBlock(dato.fotos, ['observacionesFinales'])}
+    <div class="fieldnote" style="margin-top:10px;">Cuando termines este trabajo, elegí una de estas opciones:</div>
+    ${botonesGuardar('guardarObservacionesMascotaFinal', 'cancelarMascotaProc')}
+  `;
+}
+function guardarObservacionesMascotaFinal(estado){
+  const actual = trabajoActual.observacionesFinales || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('obsm_texto').value.trim();
+  trabajoActual.observacionesFinales = actual;
+  mascotaProcActivo=null;
+  finalizarGuardadoMascota(estado, 'mascota-procedimientos');
+}
+
 function resumenTrabajoMascota(t){
-  let out = `Especie: ${t.especie}\nEstado: ${t.estado}\n`;
+  let out = `Especie: ${t.especie}\n`;
   const g = t.informacionGeneral;
   if(g && hasData(g)){
     const p = g.propietario||{}, pa = g.paciente||{};
@@ -2134,7 +2204,8 @@ function resumenTrabajoMascota(t){
     out += `\nExploración clínica:\n`;
     if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
     if(t.exploracionClinica.condicionCorporal) out += `  Condición corporal: ${t.exploracionClinica.condicionCorporal}\n`;
-    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+    if(t.exploracionClinica.temperatura) out += `  Temperatura: ${t.exploracionClinica.temperatura}\n`;
+    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema explorado: ${k}\n    Comentario: ${campoResumen(v)}\n`; });
   }
   if(t.examenesComplementarios && hasData(t.examenesComplementarios)){
     out += `\nExámenes complementarios:\n`;
@@ -2143,7 +2214,7 @@ function resumenTrabajoMascota(t){
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
-    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema intervenido: ${k}\n    Qué se hizo: ${campoResumen(v)}\n`; });
   }
   if(t.sanidad && hasData(t.sanidad)){
     out += `\nSanidad:\n`;
@@ -2156,6 +2227,7 @@ function resumenTrabajoMascota(t){
   }
   if(hasData(t.tratamientos)) out += `\nTratamientos: ${campoResumen(t.tratamientos)}\n`;
   if(hasData(t.otroProcedimiento)) out += `\nOtros procedimientos: ${campoResumen(t.otroProcedimiento)}\n`;
+  if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
   return out;
 }
 
@@ -2301,13 +2373,14 @@ function campoResumen(v){
 function resumenTrabajo(t){
   if(t.especie==='Bovino') return resumenTrabajoBovino(t);
   if(t.especie==='Canino'||t.especie==='Felino'||t.especie==='Otros') return resumenTrabajoMascota(t);
-  let out = `Especie: ${t.especie}\nEstado: ${t.estado}\n`;
+  let out = `Especie: ${t.especie}\n`;
   if(t.datosPaciente && hasData(t.datosPaciente)) out += `\nPaciente: ${t.datosPaciente.nombre||'—'} · ${t.datosPaciente.pelaje||''} · ${t.datosPaciente.edad||''} · ${t.datosPaciente.sexo||''}\n`;
   if(t.exploracionClinica && hasData(t.exploracionClinica)){
     out += `\nExploración clínica:\n`;
     if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
     if(t.exploracionClinica.condicionCorporal) out += `  Condición corporal: ${t.exploracionClinica.condicionCorporal}\n`;
-    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+    if(t.exploracionClinica.temperatura) out += `  Temperatura: ${t.exploracionClinica.temperatura}\n`;
+    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema explorado: ${k}\n    Comentario: ${campoResumen(v)}\n`; });
   }
   if(t.exploracionReproductiva && hasData(t.exploracionReproductiva)){
     const r = t.exploracionReproductiva;
@@ -2325,7 +2398,7 @@ function resumenTrabajo(t){
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
-    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema intervenido: ${k}\n    Qué se hizo: ${campoResumen(v)}\n`; });
   }
   if(hasData(t.tratamiento)) out += `\nTratamiento: ${campoResumen(t.tratamiento)}\n`;
   if(t.sanidad && hasData(t.sanidad)){
@@ -2334,16 +2407,18 @@ function resumenTrabajo(t){
     if(t.sanidad.sanidadMasiva && t.sanidad.sanidadMasiva.filas && t.sanidad.sanidadMasiva.filas.length) out += `  Sanidad masiva: ${t.sanidad.sanidadMasiva.filas.length} animales\n`;
   }
   if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
+  if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
   return out;
 }
 function resumenTrabajoBovino(t){
-  let out = `Especie: Bovino\nEstado: ${t.estado}\n`;
+  let out = `Especie: Bovino\n`;
   if(t.registro && t.registro.caravana) out += `\nCaravana de registro: ${t.registro.caravana}\n`;
   if(t.exploracionClinica && hasData(t.exploracionClinica)){
     out += `\nExploración clínica:\n`;
     if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
     if(t.exploracionClinica.condicionCorporal) out += `  Condición corporal: ${t.exploracionClinica.condicionCorporal}\n`;
-    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  ${k}: ${campoResumen(v)}\n`; });
+    if(t.exploracionClinica.temperatura) out += `  Temperatura: ${t.exploracionClinica.temperatura}\n`;
+    Object.entries(t.exploracionClinica.examenClinico||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema explorado: ${k}\n    Comentario: ${campoResumen(v)}\n`; });
   }
   if(t.exploracionReproductiva && hasData(t.exploracionReproductiva)){
     const r = t.exploracionReproductiva;
@@ -2383,7 +2458,7 @@ function resumenTrabajoBovino(t){
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
-    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(v && v.texto) out += `  ${k} (caravana ${v.caravana||'—'}): ${campoResumen(v)}\n`; });
+    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (caravana ${v.caravana||'—'})\n    Qué se hizo: ${campoResumen(v)}\n`; });
   }
   if(t.tratamiento && hasData(t.tratamiento)){
     out += `\nTratamiento:\n`;
@@ -2396,6 +2471,7 @@ function resumenTrabajoBovino(t){
     if(t.sanidad.masivo) Object.entries(t.sanidad.masivo).forEach(([k,v])=>{ if(v && v.filas && v.filas.length) out += `  Masivo - ${k}: ${v.filas.length} animales\n`; });
   }
   if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
+  if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
   return out;
 }
 
@@ -2522,7 +2598,14 @@ function viewInformeCompleto(){
   const cliente = t.clienteId?clienteById(t.clienteId):null;
   return `
     <button class="backbtn" onclick="informeVerId=null; navigate('informes')">‹ Volver</button>
-    <div class="reportbox">${renderInformeHTML(t,cliente)}</div>
+    <div class="reportbox" style="position:relative; overflow:hidden;">
+      <div class="reportWatermark">
+        <div class="wmLine">Martín Valle</div>
+        <img src="icon-512.png" alt="Integral Vet">
+        <div class="wmLine">Médico Veterinario</div>
+      </div>
+      <div style="position:relative; z-index:1;">${renderInformeHTML(t,cliente)}</div>
+    </div>
     <div class="facturacionRow" style="margin-top:14px;">
       <button class="factbtn ${t.facturado?'on':''}" onclick="toggleFacturado('${t.id}', this)">${t.facturado?'✓ ':''}Facturado</button>
       <button class="factbtn ${t.cobrado?'on':''}" onclick="toggleCobrado('${t.id}', this)">${t.cobrado?'✓ ':''}Cobrado</button>
@@ -2547,7 +2630,9 @@ function recolectarFotos(obj, acc){
 }
 function renderInformeHTML(t, cliente){
   let html = '';
-  html += `<div style="margin-bottom:14px;"><b style="font-size:15px;">${cliente?escapeHtml(clienteNombreCompleto(cliente)):'Sin cliente asociado'}</b>`;
+  html += `<div style="margin-bottom:14px;">`;
+  html += `<b style="font-size:15px;">${fmtFecha(t.fechaInicio)}</b>`;
+  html += `<div style="font-weight:700; font-size:13.5px; margin-top:2px;">${cliente?escapeHtml(clienteNombreCompleto(cliente)):'Sin cliente asociado'}</div>`;
   if(cliente && cliente.establecimientos && cliente.establecimientos.length){
     const estab = t.establecimientoId ? cliente.establecimientos.find(e=>e.id===t.establecimientoId) : null;
     if(estab){
@@ -2556,7 +2641,7 @@ function renderInformeHTML(t, cliente){
       html += `<div class="fieldnote">${cliente.establecimientos.map(e=>escapeHtml(e.nombre)).join(' · ')}</div>`;
     }
   }
-  html += `<div class="fieldnote">${fmtFecha(t.fechaInicio)} · ${t.especie} · ${t.estado==='finalizado'?'Finalizado':'En curso'}</div></div>`;
+  html += `</div>`;
 
   if(t.especie==='Bovino' && t.exploracionReproductiva && t.exploracionReproductiva.diagnosticoGestacion){
     const regs = t.exploracionReproductiva.diagnosticoGestacion.registros||[];
