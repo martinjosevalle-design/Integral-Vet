@@ -242,7 +242,7 @@ const PODAL_MIEMBROS = [
   {id:'PI', lab:'Miembro posterior izquierdo'},
   {id:'PD', lab:'Miembro posterior derecho'},
 ];
-const PODAL_PROCEDIMIENTOS_FULL = ['Desvasado funcional','La baja','Amputación','Cauterización','Colocación de sulfato de cobre','Vendaje','Antibiótico terapia'];
+const PODAL_PROCEDIMIENTOS_FULL = ['Desvasado funcional','Lavaje','Amputación','Cauterización','Colocación de sulfato de cobre','Vendaje','Antibiótico terapia'];
 const SISTEMA_ICONOS = {'Respiratorio':'🫁','Digestivo':'🍽️','Circulatorio':'🫀','Locomotor':'🦴','Urogenital':'💧','Neurológico':'🧠','Tegumentario':'🩹','Sentidos especiales':'👁️'};
 function iconoSistema(s){
   if(s==='Digestivo'){
@@ -1580,6 +1580,8 @@ function catAndrologico(){
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.tonoTesticular===o?'selected':''}" onclick="setAndrologico('tonoTesticular','${o}')">${o}</div>`).join('')}</div>
     <div class="sectiontitle">Exploración de glándulas anexas</div>
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.glandulasAnexas===o?'selected':''}" onclick="setAndrologico('glandulasAnexas','${o}')">${o}</div>`).join('')}</div>
+    <label>Observaciones (glándulas anexas)</label>
+    <textarea id="an_glandulasAnexasObs" placeholder="Alguna observación adicional...">${escapeHtml(a.glandulasAnexasObs||'')}</textarea>
     <label>Circunferencia escrotal</label>
     <textarea id="an_circunferencia" placeholder="Medida y detalle...">${escapeHtml((a.circunferencia||{}).texto||'')}</textarea>
     ${fotosBlock((a.circunferencia||{}).fotos, ['examenAndrologico','circunferencia'])}
@@ -1602,6 +1604,7 @@ function guardarAndrologico(estado){
   a.caravana = document.getElementById('an_caravana').value.trim();
   a.raza = document.getElementById('an_raza').value.trim();
   a.edad = document.getElementById('an_edad').value.trim();
+  a.glandulasAnexasObs = document.getElementById('an_glandulasAnexasObs').value.trim();
   a.circunferencia = {texto: document.getElementById('an_circunferencia').value.trim(), fotos: (a.circunferencia||{}).fotos||[]};
   a.ecografia = {texto: document.getElementById('an_ecografia').value.trim(), fotos: (a.ecografia||{}).fotos||[]};
   a.calidadSeminal = {texto: document.getElementById('an_calidadSeminal').value.trim(), fotos: (a.calidadSeminal||{}).fotos||[]};
@@ -2704,7 +2707,7 @@ function resumenTrabajoBovino(t){
     if(a.locomotor) out += `  Ap. locomotor: ${a.locomotor}\n`;
     if(a.vision) out += `  Ap. visión: ${a.vision}\n`;
     if(a.tonoTesticular) out += `  Tono testicular: ${a.tonoTesticular}\n`;
-    if(a.glandulasAnexas) out += `  Exploración de glándulas anexas: ${a.glandulasAnexas}\n`;
+    if(a.glandulasAnexas) out += `  Exploración de glándulas anexas: ${a.glandulasAnexas}${a.glandulasAnexasObs?' — '+a.glandulasAnexasObs:''}\n`;
     if(hasData(a.circunferencia)) out += `  Circunferencia escrotal: ${campoResumen(a.circunferencia)}\n`;
     if(hasData(a.ecografia)) out += `  Ecografía testicular: ${campoResumen(a.ecografia)}\n`;
     if(hasData(a.calidadSeminal)) out += `  Calidad seminal: ${campoResumen(a.calidadSeminal)}\n`;
