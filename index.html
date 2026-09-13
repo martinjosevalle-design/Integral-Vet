@@ -204,6 +204,9 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const fbAuth = firebase.auth();
+fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(err){
+  console.warn('No se pudo fijar persistencia de sesión:', err.code);
+});
 const db = firebase.firestore();
 db.enablePersistence({synchronizeTabs:true}).catch(function(err){
   console.warn('Persistencia offline no disponible:', err.code);
@@ -224,6 +227,22 @@ let clienteContexto = null; // clienteId preseleccionado al iniciar un trabajo
 let clienteEstablecimientoContexto = null; // establecimientoId preseleccionado al iniciar un trabajo
 
 const SISTEMAS = ['Respiratorio','Digestivo','Circulatorio','Locomotor','Urogenital','Neurológico','Tegumentario','Sentidos especiales'];
+const ANESTESICOS_INDIVIDUALES = ['Acepromazina','Tramadol','Butorfanol','Xilacina','Ketamina','Diazepam','Lidocaína'];
+const ANESTESICOS_COMBINACIONES = ['Xilacina + Butorfanol','Ketamina + Xilacina','Ketamina + Diazepam'];
+const PODAL_TIPOS = [
+  {id:'sobrecrecimiento', lab:'Sobrecrecimiento'},
+  {id:'callo', lab:'Callo interdigital'},
+  {id:'ulcera', lab:'Úlcera'},
+  {id:'dobleSuela', lab:'Doble suela'},
+  {id:'otro', lab:'Otro'},
+];
+const PODAL_MIEMBROS = [
+  {id:'AI', lab:'Miembro anterior izquierdo'},
+  {id:'AD', lab:'Miembro anterior derecho'},
+  {id:'PI', lab:'Miembro posterior izquierdo'},
+  {id:'PD', lab:'Miembro posterior derecho'},
+];
+const PODAL_PROCEDIMIENTOS_FULL = ['Desvasado funcional','La baja','Amputación','Cauterización','Colocación de sulfato de cobre','Vendaje','Antibiótico terapia'];
 const SISTEMA_ICONOS = {'Respiratorio':'🫁','Digestivo':'🍽️','Circulatorio':'🫀','Locomotor':'🦴','Urogenital':'💧','Neurológico':'🧠','Tegumentario':'🩹','Sentidos especiales':'👁️'};
 function iconoSistema(s){
   if(s==='Digestivo'){
@@ -364,7 +383,7 @@ function render(){
   if(showChrome){ document.getElementById('whoLabel').innerHTML = auth ? `${escapeHtml(auth.usuario)} · <a href="#" style="color:var(--teal)" onclick="cerrarSesion(); return false;">Salir</a>` : ''; renderNav(); }
 
   const main = document.getElementById('main');
-  if(view==='cargando') main.innerHTML = '<div class="empty">Cargando…</div>';
+  if(view==='cargando') main.innerHTML = navigator.onLine ? '<div class="empty">Cargando…</div>' : '<div class="empty">Sin conexión — abriendo con los datos guardados en el dispositivo…</div>';
   else if(view==='login') main.innerHTML = viewLogin();
   else if(view==='home') main.innerHTML = viewHome();
   else if(view==='clientes') main.innerHTML = viewClientes();
@@ -835,8 +854,13 @@ function viewEquinoCategorias(){
           ${c.has ? '<span class="check">✓</span>' : ''}
         </div>`).join('')}
     </div>
+    <div class="fieldnote" style="margin-top:16px;">Cuando termines con este trabajo, elegí una opción:</div>
+    ${botonesGuardar('guardarDesdeCategorias','salirSinGuardarDesdeCategorias')}
   `;
 }
+function guardarDesdeCategorias(estado){ finalizarGuardado(estado); }
+function guardarDesdeCategoriasMascota(estado){ finalizarGuardadoMascota(estado, 'mascotaCategorias'); }
+function salirSinGuardarDesdeCategorias(){ trabajoActual=null; navigate('home'); }
 function salirDeTrabajo(){
   if(hasData(trabajoActual.datosPaciente)||hasData(trabajoActual.exploracionClinica)||hasData(trabajoActual.tratamiento)){
     if(!confirm('Tenés datos sin guardar en este trabajo. ¿Salir de todas formas?')) return;
@@ -1088,8 +1112,34 @@ function guardarComplementariosFinal(estado){ finalizarGuardado(estado); }
 
 // --- Procedimientos quirúrgicos ---
 let sistemaQuirurgicoActivo = null;
+let protocoloAnestesicoActivo = false;
+function toggleAnestesico(valor){
+  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos = {};
+  const q = trabajoActual.procedimientosQuirurgicos;
+  if(!q.protocoloAnestesico) q.protocoloAnestesico = {drogas:[]};
+  const arr = q.protocoloAnestesico.drogas;
+  const i = arr.indexOf(valor);
+  if(i>=0) arr.splice(i,1); else arr.push(valor);
+  render();
+}
+function catProtocoloAnestesico(volverJS, backLabel){
+  const q = trabajoActual.procedimientosQuirurgicos || {};
+  const drogas = (q.protocoloAnestesico && q.protocoloAnestesico.drogas) || [];
+  return `
+    <button class="backbtn" onclick="${volverJS}">‹ ${backLabel}</button>
+    <div class="sectiontitle">Protocolo anestésico utilizado</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Tocá todas las drogas que usaste, podés combinar varias. No hace falta cargar dosis.</div>
+    <div class="optrow" style="flex-wrap:wrap;">${ANESTESICOS_INDIVIDUALES.map(d=>`<div class="optbtn ${drogas.includes(d)?'selected':''}" onclick="toggleAnestesico('${d}')">${d}</div>`).join('')}</div>
+    <div class="sectiontitle">Combinaciones habituales</div>
+    <div class="optrow" style="flex-wrap:wrap;">${ANESTESICOS_COMBINACIONES.map(d=>`<div class="optbtn ${drogas.includes(d)?'selected':''}" onclick="toggleAnestesico('${d}')">${d}</div>`).join('')}</div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="${volverJS}">Listo, volver</button>
+  `;
+}
 function catQuirurgicos(){
   const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(protocoloAnestesicoActivo){
+    return catProtocoloAnestesico("protocoloAnestesicoActivo=false; navigate('equino-quirurgicos')", "Procedimientos quirúrgicos");
+  }
   if(sistemaQuirurgicoActivo){
     const dato = q[sistemaQuirurgicoActivo] || {texto:'', fotos:[]};
     return `
@@ -1103,6 +1153,12 @@ function catQuirurgicos(){
   }
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Protocolo anestésico</div>
+    <div class="sublist">
+      <div class="subtile" onclick="protocoloAnestesicoActivo=true; navigate('equino-quirurgicos')">
+        <span>💊 Protocolo anestésico utilizado</span>${(q.protocoloAnestesico&&q.protocoloAnestesico.drogas&&q.protocoloAnestesico.drogas.length) ? '<span class="check">✓</span>' : ''}
+      </div>
+    </div>
     <div class="sectiontitle">Sistema a intervenir</div>
     <div class="sublist">
       ${SISTEMAS.map(s=>`
@@ -1239,8 +1295,7 @@ function catObservaciones(){
     <div class="fieldnote" style="margin-bottom:6px;">Espacio para agregar algo más sobre este trabajo, por fuera de cada sistema o categoría.</div>
     <textarea id="obs_texto" placeholder="Observaciones generales...">${escapeHtml(dato.texto||'')}</textarea>
     ${fotosBlock(dato.fotos, ['observacionesFinales'])}
-    <div class="fieldnote" style="margin-top:10px;">Cuando termines este trabajo, elegí una de estas opciones:</div>
-    ${botonesGuardar('guardarObservacionesFinal')}
+    ${botonGuardarSimple('guardarObservacionesFinal')}
   `;
 }
 function guardarObservacionesFinal(estado){
@@ -1281,6 +1336,8 @@ function viewBovinoCategorias(){
           ${c.has ? '<span class="check">✓</span>' : ''}
         </div>`).join('')}
     </div>
+    <div class="fieldnote" style="margin-top:16px;">Cuando termines con este trabajo, elegí una opción:</div>
+    ${botonesGuardar('guardarDesdeCategorias','salirSinGuardarDesdeCategorias')}
   `;
 }
 function viewBovinoCategoria(cat){
@@ -1521,6 +1578,8 @@ function catAndrologico(){
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.vision===o?'selected':''}" onclick="setAndrologico('vision','${o}')">${o}</div>`).join('')}</div>
     <div class="sectiontitle">Tono testicular</div>
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.tonoTesticular===o?'selected':''}" onclick="setAndrologico('tonoTesticular','${o}')">${o}</div>`).join('')}</div>
+    <div class="sectiontitle">Exploración de glándulas anexas</div>
+    <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.glandulasAnexas===o?'selected':''}" onclick="setAndrologico('glandulasAnexas','${o}')">${o}</div>`).join('')}</div>
     <label>Circunferencia escrotal</label>
     <textarea id="an_circunferencia" placeholder="Medida y detalle...">${escapeHtml((a.circunferencia||{}).texto||'')}</textarea>
     ${fotosBlock((a.circunferencia||{}).fotos, ['examenAndrologico','circunferencia'])}
@@ -1630,9 +1689,184 @@ function guardarSangradoMasivoBovino(){
 }
 function guardarComplementariosBovinoFinal(estado){ finalizarGuardado(estado); }
 
+// --- Patologías podales (Bovino) ---
+let locomotorMenuBovino = false;
+let patologiasPodalesActivo = false;
+let podalAnimalActivo = null;
+let podalWizard = null;
+function agregarAnimalPodal(){
+  const val = document.getElementById('podal_nueva_caravana').value.trim();
+  if(!val) return;
+  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos = {};
+  const q = trabajoActual.procedimientosQuirurgicos;
+  if(!q.patologiasPodales) q.patologiasPodales = {animales:[]};
+  if(!q.patologiasPodales.animales.find(a=>a.caravana===val)){
+    q.patologiasPodales.animales.push({caravana:val, hallazgos:[]});
+  }
+  podalAnimalActivo = val;
+  render();
+}
+function iniciarPodalWizard(tipo){
+  podalWizard = {tipo, step: tipo==='otro' ? 'otro' : 'miembros', miembros:[], procedimientos:[], otroTexto:''};
+  render();
+}
+function confirmarPodalOtroTexto(){
+  podalWizard.otroTexto = document.getElementById('podal_otro_texto').value.trim();
+  podalWizard.step = 'miembros';
+  render();
+}
+function togglePodalMiembro(id){
+  const arr = podalWizard.miembros;
+  const i = arr.indexOf(id);
+  if(i>=0) arr.splice(i,1); else arr.push(id);
+  render();
+}
+function avanzarPodalProcedimiento(){
+  if(!podalWizard.miembros.length) return;
+  podalWizard.step = 'procedimientos';
+  render();
+}
+function togglePodalProcedimiento(p){
+  const arr = podalWizard.procedimientos;
+  const i = arr.indexOf(p);
+  if(i>=0) arr.splice(i,1); else arr.push(p);
+  render();
+}
+function guardarPodalHallazgo(procedimientos){
+  const q = trabajoActual.procedimientosQuirurgicos;
+  const animal = q.patologiasPodales.animales.find(a=>a.caravana===podalAnimalActivo);
+  animal.hallazgos.push({tipo: podalWizard.tipo, otroTexto: podalWizard.otroTexto, miembros: podalWizard.miembros.slice(), procedimientos: procedimientos.slice()});
+  podalWizard = null;
+  render();
+}
+function quitarHallazgoPodal(i){
+  const q = trabajoActual.procedimientosQuirurgicos;
+  const animal = q.patologiasPodales.animales.find(a=>a.caravana===podalAnimalActivo);
+  animal.hallazgos.splice(i,1);
+  render();
+}
+function catPodalWizard(){
+  const w = podalWizard;
+  const tipoLab = PODAL_TIPOS.find(t=>t.id===w.tipo).lab;
+  if(w.step==='otro'){
+    return `
+      <button class="backbtn" onclick="podalWizard=null; render()">‹ Cancelar</button>
+      <div class="sectiontitle">Otro hallazgo</div>
+      <label>¿Qué encontraste?</label>
+      <textarea id="podal_otro_texto" placeholder="Describí el hallazgo...">${escapeHtml(w.otroTexto)}</textarea>
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="confirmarPodalOtroTexto()">Siguiente</button>
+    `;
+  }
+  if(w.step==='miembros'){
+    return `
+      <button class="backbtn" onclick="podalWizard=null; render()">‹ Cancelar</button>
+      <div class="sectiontitle">${tipoLab}${w.tipo==='otro'&&w.otroTexto?': '+escapeHtml(w.otroTexto):''}</div>
+      <div class="fieldnote" style="margin-bottom:6px;">¿En qué miembro(s)?</div>
+      <div class="optrow" style="flex-wrap:wrap;">${PODAL_MIEMBROS.map(m=>`<div class="optbtn ${w.miembros.includes(m.id)?'selected':''}" onclick="togglePodalMiembro('${m.id}')">${m.lab}</div>`).join('')}</div>
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="avanzarPodalProcedimiento()" ${w.miembros.length?'':'disabled'}>Siguiente</button>
+    `;
+  }
+  if(w.tipo==='sobrecrecimiento'){
+    return `
+      <button class="backbtn" onclick="podalWizard.step='miembros'; render()">‹ Volver</button>
+      <div class="sectiontitle">Procedimiento</div>
+      <div class="fieldnote" style="margin-bottom:10px;">Para sobrecrecimiento el procedimiento es desvasado funcional.</div>
+      <button class="btn btn-teal" onclick="guardarPodalHallazgo(['Desvasado funcional'])">Guardar hallazgo</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="podalWizard.step='miembros'; render()">‹ Volver</button>
+    <div class="sectiontitle">Procedimiento</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Tocá todo lo que hiciste.</div>
+    <div class="optrow" style="flex-wrap:wrap;">${PODAL_PROCEDIMIENTOS_FULL.map(p=>`<div class="optbtn ${w.procedimientos.includes(p)?'selected':''}" onclick="togglePodalProcedimiento('${p}')">${p}</div>`).join('')}</div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarPodalHallazgo(podalWizard.procedimientos)" ${w.procedimientos.length?'':'disabled'}>Guardar hallazgo</button>
+  `;
+}
+function catPodalAnimal(){
+  const q = trabajoActual.procedimientosQuirurgicos || {};
+  const pp = q.patologiasPodales || {animales:[]};
+  const animal = pp.animales.find(a=>a.caravana===podalAnimalActivo);
+  if(!animal){ podalAnimalActivo=null; return catPatologiasPodales(); }
+  if(podalWizard) return catPodalWizard();
+  return `
+    <button class="backbtn" onclick="podalAnimalActivo=null; render()">‹ Patologías podales</button>
+    <div class="sectiontitle">Caravana ${escapeHtml(animal.caravana)}</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Tocá el tipo de hallazgo que encontraste en este animal.</div>
+    <div class="sublist">
+      ${PODAL_TIPOS.map(t=>`<div class="subtile" onclick="iniciarPodalWizard('${t.id}')"><span>${t.lab}</span></div>`).join('')}
+    </div>
+    ${animal.hallazgos.length ? `
+      <div class="sectiontitle" style="margin-top:16px;">Hallazgos cargados</div>
+      ${animal.hallazgos.map((h,i)=>{
+        const lab = PODAL_TIPOS.find(t=>t.id===h.tipo).lab + (h.tipo==='otro'&&h.otroTexto ? ' — '+escapeHtml(h.otroTexto) : '');
+        const miembros = h.miembros.map(m=>PODAL_MIEMBROS.find(x=>x.id===m).lab).join(', ');
+        return `<div class="listcard">
+          <div class="meta"><b>${lab}</b><br>${miembros}<br>Procedimiento: ${h.procedimientos.join(', ')}</div>
+          <button class="removeanimal" onclick="quitarHallazgoPodal(${i})">✕</button>
+        </div>`;
+      }).join('')}
+    ` : ''}
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="podalAnimalActivo=null; render()">Listo, volver</button>
+  `;
+}
+function catPatologiasPodales(){
+  const q = trabajoActual.procedimientosQuirurgicos || {};
+  const pp = q.patologiasPodales || {animales:[]};
+  if(podalAnimalActivo) return catPodalAnimal();
+  return `
+    <button class="backbtn" onclick="patologiasPodalesActivo=false; render()">‹ Aparato locomotor</button>
+    <div class="sectiontitle">Patologías podales</div>
+    <label>Identificación / caravana del animal</label>
+    <input type="text" id="podal_nueva_caravana" placeholder="Ej: 245">
+    <button class="btn btn-teal" style="margin-top:10px;" onclick="agregarAnimalPodal()">+ Agregar animal</button>
+    <div class="sublist" style="margin-top:16px;">
+      ${(pp.animales||[]).map(a=>`
+        <div class="subtile" onclick="podalAnimalActivo='${a.caravana}'; render()">
+          <span>🐄 Caravana ${escapeHtml(a.caravana)}</span>
+          <span class="check">${a.hallazgos.length} hallazgo${a.hallazgos.length===1?'':'s'}</span>
+        </div>`).join('') || '<div class="fieldnote">Todavía no agregaste animales.</div>'}
+    </div>
+  `;
+}
+function resumenPatologiasPodales(pq){
+  const pp = pq && pq.patologiasPodales;
+  if(!pp || !pp.animales || !pp.animales.length) return '';
+  let out = `  Patologías podales:\n`;
+  pp.animales.forEach(a=>{
+    if(!a.hallazgos.length) return;
+    out += `    Caravana ${a.caravana}:\n`;
+    a.hallazgos.forEach(h=>{
+      const lab = PODAL_TIPOS.find(t=>t.id===h.tipo).lab + (h.tipo==='otro'&&h.otroTexto ? ` (${h.otroTexto})` : '');
+      const miembros = h.miembros.map(m=>PODAL_MIEMBROS.find(x=>x.id===m).lab).join(', ');
+      out += `      ${lab} — ${miembros} — Procedimiento: ${h.procedimientos.join(', ')}\n`;
+    });
+  });
+  return out;
+}
+
 // --- Procedimientos quirúrgicos (Bovino) ---
 function catQuirurgicosBovino(){
   const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(protocoloAnestesicoActivo){
+    return catProtocoloAnestesico("protocoloAnestesicoActivo=false; render()", "Procedimientos quirúrgicos");
+  }
+  if(patologiasPodalesActivo){
+    return catPatologiasPodales();
+  }
+  if(locomotorMenuBovino){
+    return `
+      <button class="backbtn" onclick="locomotorMenuBovino=false; render()">‹ Sistema a intervenir</button>
+      <div class="sectiontitle">Aparato locomotor</div>
+      <div class="sublist">
+        <div class="subtile" onclick="locomotorMenuBovino=false; sistemaQuirurgicoActivoBovino='Locomotor'; render()">
+          <span>🩹 Tratamiento individual</span>${q['Locomotor']&&q['Locomotor'].texto?'<span class="check">✓</span>':''}
+        </div>
+        <div class="subtile" onclick="locomotorMenuBovino=false; patologiasPodalesActivo=true; render()">
+          <span>🐄 Patologías podales</span>${(q.patologiasPodales&&q.patologiasPodales.animales&&q.patologiasPodales.animales.length)?'<span class="check">✓</span>':''}
+        </div>
+      </div>
+    `;
+  }
   if(sistemaQuirurgicoActivoBovino){
     const dato = q[sistemaQuirurgicoActivoBovino] || {caravana:'', texto:'', fotos:[]};
     return `
@@ -1648,12 +1882,21 @@ function catQuirurgicosBovino(){
   }
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Protocolo anestésico</div>
+    <div class="sublist">
+      <div class="subtile" onclick="protocoloAnestesicoActivo=true; render()">
+        <span>💊 Protocolo anestésico utilizado</span>${(q.protocoloAnestesico&&q.protocoloAnestesico.drogas&&q.protocoloAnestesico.drogas.length)?'<span class="check">✓</span>':''}
+      </div>
+    </div>
     <div class="sectiontitle">Sistema a intervenir</div>
     <div class="sublist">
-      ${SISTEMAS.map(s=>`
-        <div class="subtile" onclick="sistemaQuirurgicoActivoBovino='${s}'; render()">
-          <span>${iconoSistema(s)} ${s}</span>${q[s]&&q[s].texto ? '<span class="check">✓</span>' : ''}
-        </div>`).join('')}
+      ${SISTEMAS.map(s=>{
+        if(s==='Locomotor'){
+          const tieneAlgo = (q['Locomotor']&&q['Locomotor'].texto) || (q.patologiasPodales&&q.patologiasPodales.animales&&q.patologiasPodales.animales.length);
+          return `<div class="subtile" onclick="locomotorMenuBovino=true; render()"><span>${iconoSistema(s)} ${s}</span>${tieneAlgo?'<span class="check">✓</span>':''}</div>`;
+        }
+        return `<div class="subtile" onclick="sistemaQuirurgicoActivoBovino='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${q[s]&&q[s].texto ? '<span class="check">✓</span>' : ''}</div>`;
+      }).join('')}
     </div>
     ${botonGuardarSimple('guardarQuirurgicosBovinoFinal')}
   `;
@@ -1872,6 +2115,8 @@ function viewMascotaCategorias(){
         <div class="left"><span class="emoji">🩺</span><span class="lab">Procedimientos</span></div>
       </div>
     </div>
+    <div class="fieldnote" style="margin-top:16px;">Cuando termines con este trabajo, elegí una opción:</div>
+    ${botonesGuardar('guardarDesdeCategoriasMascota','salirSinGuardarDesdeCategorias')}
   `;
 }
 
@@ -2020,6 +2265,9 @@ function guardarComplementariosMascotaFinal(estado){ mascotaProcActivo=null; fin
 // --- Procedimientos quirúrgicos ---
 function catQuirurgicosMascota(){
   const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(protocoloAnestesicoActivo){
+    return catProtocoloAnestesico("protocoloAnestesicoActivo=false; render()", "Procedimientos quirúrgicos");
+  }
   if(mascotaSistemaQuirurgicoActivo){
     const dato = q[mascotaSistemaQuirurgicoActivo] || {texto:'',fotos:[]};
     return `
@@ -2033,6 +2281,12 @@ function catQuirurgicosMascota(){
   }
   return `
     <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Protocolo anestésico</div>
+    <div class="sublist">
+      <div class="subtile" onclick="protocoloAnestesicoActivo=true; render()">
+        <span>💊 Protocolo anestésico utilizado</span>${(q.protocoloAnestesico&&q.protocoloAnestesico.drogas&&q.protocoloAnestesico.drogas.length)?'<span class="check">✓</span>':''}
+      </div>
+    </div>
     <div class="sectiontitle">Sistema a intervenir</div>
     <div class="sublist">
       ${SISTEMAS.map(s=>`<div class="subtile" onclick="mascotaSistemaQuirurgicoActivo='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${hasData(q[s])?'<span class="check">✓</span>':''}</div>`).join('')}
@@ -2180,8 +2434,7 @@ function catObservacionesMascota(){
     <div class="fieldnote" style="margin-bottom:6px;">Espacio para agregar algo más sobre este trabajo.</div>
     <textarea id="obsm_texto" placeholder="Observaciones generales...">${escapeHtml(dato.texto||'')}</textarea>
     ${fotosBlock(dato.fotos, ['observacionesFinales'])}
-    <div class="fieldnote" style="margin-top:10px;">Cuando termines este trabajo, elegí una de estas opciones:</div>
-    ${botonesGuardar('guardarObservacionesMascotaFinal', 'cancelarMascotaProc')}
+    ${botonGuardarSimple('guardarObservacionesMascotaFinal')}
   `;
 }
 function guardarObservacionesMascotaFinal(estado){
@@ -2214,7 +2467,8 @@ function resumenTrabajoMascota(t){
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
-    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema intervenido: ${k}\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
+    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema intervenido: ${k}\n    Qué se hizo: ${campoResumen(v)}\n`; });
   }
   if(t.sanidad && hasData(t.sanidad)){
     out += `\nSanidad:\n`;
@@ -2370,6 +2624,11 @@ function campoResumen(v){
   if(v.fotos && v.fotos.length) s += ` [${v.fotos.length} foto${v.fotos.length===1?'':'s'}]`;
   return s;
 }
+const CLAVES_NO_SISTEMA_QX = ['protocoloAnestesico','patologiasPodales','locomotorModo'];
+function resumenProtocoloAnestesico(pq){
+  const drogas = (pq && pq.protocoloAnestesico && pq.protocoloAnestesico.drogas) || [];
+  return drogas.length ? `  Protocolo anestésico utilizado: ${drogas.join(', ')}\n` : '';
+}
 function resumenTrabajo(t){
   if(t.especie==='Bovino') return resumenTrabajoBovino(t);
   if(t.especie==='Canino'||t.especie==='Felino'||t.especie==='Otros') return resumenTrabajoMascota(t);
@@ -2398,7 +2657,8 @@ function resumenTrabajo(t){
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
-    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema intervenido: ${k}\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
+    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema intervenido: ${k}\n    Qué se hizo: ${campoResumen(v)}\n`; });
   }
   if(hasData(t.tratamiento)) out += `\nTratamiento: ${campoResumen(t.tratamiento)}\n`;
   if(t.sanidad && hasData(t.sanidad)){
@@ -2444,6 +2704,7 @@ function resumenTrabajoBovino(t){
     if(a.locomotor) out += `  Ap. locomotor: ${a.locomotor}\n`;
     if(a.vision) out += `  Ap. visión: ${a.vision}\n`;
     if(a.tonoTesticular) out += `  Tono testicular: ${a.tonoTesticular}\n`;
+    if(a.glandulasAnexas) out += `  Exploración de glándulas anexas: ${a.glandulasAnexas}\n`;
     if(hasData(a.circunferencia)) out += `  Circunferencia escrotal: ${campoResumen(a.circunferencia)}\n`;
     if(hasData(a.ecografia)) out += `  Ecografía testicular: ${campoResumen(a.ecografia)}\n`;
     if(hasData(a.calidadSeminal)) out += `  Calidad seminal: ${campoResumen(a.calidadSeminal)}\n`;
@@ -2458,7 +2719,9 @@ function resumenTrabajoBovino(t){
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
-    Object.entries(t.procedimientosQuirurgicos).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (caravana ${v.caravana||'—'})\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
+    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (caravana ${v.caravana||'—'})\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    out += resumenPatologiasPodales(t.procedimientosQuirurgicos);
   }
   if(t.tratamiento && hasData(t.tratamiento)){
     out += `\nTratamiento:\n`;
