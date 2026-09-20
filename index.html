@@ -243,6 +243,8 @@ const PODAL_MIEMBROS = [
   {id:'PD', lab:'Miembro posterior derecho'},
 ];
 const PODAL_PROCEDIMIENTOS_FULL = ['Desvasado funcional','Lavaje','Amputación','Cauterización','Colocación de sulfato de cobre','Vendaje','Antibiótico terapia'];
+const SANIDAD_CATEGORIAS_BOVINO = ['Toro','Vaca','Vaquillona','Torito','Novillo','Ternero','Ternera'];
+const SANIDAD_VACUNAS_BOVINO = ['Complejo respiratorio y queratoconjuntivitis','Clostridiales','Neonatal','Reproductiva','Diarrea viral bovina','Triple','Otra'];
 const SISTEMA_ICONOS = {'Respiratorio':'🫁','Digestivo':'🍽️','Circulatorio':'🫀','Locomotor':'🦴','Urogenital':'💧','Neurológico':'🧠','Tegumentario':'🩹','Sentidos especiales':'👁️'};
 function iconoSistema(s){
   if(s==='Digestivo'){
@@ -514,6 +516,33 @@ function cerrarSesion(){
 }
 
 // ================= HOME =================
+function establecimientoNombreDe(clienteId, establecimientoId){
+  const c = clienteId ? clienteById(clienteId) : null;
+  if(!c || !establecimientoId || !c.establecimientos) return '';
+  const e = c.establecimientos.find(x=>x.id===establecimientoId);
+  return e ? (e.nombre||'') : '';
+}
+function recordatoriosVacunasMasivas(){
+  const out = [];
+  trabajos.forEach(t=>{
+    if(t.especie==='Bovino' && t.sanidad && t.sanidad.masivo && t.sanidad.masivo.vacunacion && t.sanidad.masivo.vacunacion.grupos){
+      t.sanidad.masivo.vacunacion.grupos.forEach((g,gi)=>{
+        if(g.repetir && !g.repetirHecho){
+          out.push({trabajoId:t.id, grupoIndex:gi, clienteId:t.clienteId, establecimientoId:t.establecimientoId, fecha:t.fechaInicio, vacuna:labelVacunaGrupo(g), repetir:g.repetir, animales:g.animales.length});
+        }
+      });
+    }
+  });
+  out.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  return out;
+}
+function marcarRecordatorioVacunaHecho(trabajoId, grupoIndex){
+  const t = trabajos.find(x=>x.id===trabajoId);
+  if(!t) return;
+  t.sanidad.masivo.vacunacion.grupos[grupoIndex].repetirHecho = true;
+  saveTrabajoDoc(t);
+  render();
+}
 function proximasVacunas(){
   const hoy = hoyISO();
   const limite = sumarDias(hoy, 2);
@@ -545,7 +574,21 @@ function viewHome(){
   const en7 = sumarDias(hoy, 7);
   const enCurso = trabajos.filter(t=>t.estado==='parcial').length;
   const vacunas = proximasVacunas();
+  const recVacMasivas = recordatoriosVacunasMasivas();
   return `
+    ${recVacMasivas.length ? `
+      <div class="sectiontitle">Vacunas a repetir</div>
+      ${recVacMasivas.map(r=>{
+        const cliente = r.clienteId?clienteById(r.clienteId):null;
+        const estab = establecimientoNombreDe(r.clienteId, r.establecimientoId);
+        return `<div class="alertcard">
+          <b>${escapeHtml(r.vacuna)}</b> — ${r.animales} animal${r.animales===1?'':'es'}<br>
+          ${cliente?escapeHtml(clienteNombreCompleto(cliente)):'Sin cliente'}${estab?' · '+escapeHtml(estab):''} · desde ${fmtFecha(r.fecha)}<br>
+          Repetir: ${escapeHtml(r.repetir)}
+          <button class="btn btn-teal" style="margin-top:8px; padding:6px 12px; font-size:13px;" onclick="marcarRecordatorioVacunaHecho('${r.trabajoId}',${r.grupoIndex})">Ya la repetí</button>
+        </div>`;
+      }).join('')}
+    ` : ''}
     ${vacunas.length ? `
       <div class="sectiontitle">Vacunas próximas (2 días)</div>
       ${vacunas.map(v=>{
@@ -784,7 +827,7 @@ function iniciarBovino(){
     examenesComplementarios: {datosAnimal:{caravana:''}, sangradoMasivo:{tubos:[], observaciones:''}},
     procedimientosQuirurgicos: {},
     tratamiento: {individual:{texto:'',fotos:[]}, masivo:{filas:[], observaciones:''}},
-    sanidad: {individual:{vacunacion:{texto:'',fotos:[]},desparasitacion:{texto:'',fotos:[]},otra:{texto:'',fotos:[]}}, masivo:{vacunacion:{filas:[],observaciones:''}, desparasitacion:{filas:[],observaciones:''}, otra:{filas:[],observaciones:''}}},
+    sanidad: {individual:{vacunacion:{texto:'',fotos:[]},desparasitacion:{texto:'',fotos:[]},otra:{texto:'',fotos:[]}}, masivo:{vacunacion:{grupos:[]}, desparasitacion:{filas:[],observaciones:''}, otra:{filas:[],observaciones:''}}},
     otroProcedimiento: {texto:'', fotos:[]},
     observacionesFinales: {texto:'', fotos:[]}
   };
@@ -1978,8 +2021,122 @@ function guardarTratamientoMasivoBovino(){
 function guardarTratamientoBovinoFinal(estado){ finalizarGuardado(estado); }
 
 // --- Sanidad (Bovino) ---
+// --- Vacunación masiva (Bovino) ---
+let vacMasivaWizard = null; // {step:'vacunas'|'animales'|'final', vacunas:[], otraTexto:'', animales:[{caravana,categoria}], dosis:'', repetir:''}
+function iniciarVacMasivaWizard(){
+  vacMasivaWizard = {step:'vacunas', vacunas:[], otraTexto:'', animales:[], dosis:'', repetir:''};
+  render();
+}
+function toggleVacMasivaVacuna(v){
+  const arr = vacMasivaWizard.vacunas;
+  const i = arr.indexOf(v);
+  if(i>=0) arr.splice(i,1); else arr.push(v);
+  render();
+}
+function avanzarVacMasivaAnimales(){
+  if(!vacMasivaWizard.vacunas.length) return;
+  if(vacMasivaWizard.vacunas.includes('Otra')){
+    const el = document.getElementById('vacm_otra_texto');
+    if(el) vacMasivaWizard.otraTexto = el.value.trim();
+  }
+  vacMasivaWizard.step = 'animales';
+  render();
+}
+function agregarAnimalVacMasiva(categoria){
+  const input = document.getElementById('vacm_caravana_input');
+  const val = input ? input.value.trim() : '';
+  if(!val) return;
+  vacMasivaWizard.animales.push({caravana: val, categoria});
+  render();
+  setTimeout(()=>{ const el=document.getElementById('vacm_caravana_input'); if(el){ el.value=''; el.focus(); } }, 0);
+}
+function quitarAnimalVacMasiva(i){
+  vacMasivaWizard.animales.splice(i,1);
+  render();
+}
+function avanzarVacMasivaFinal(){
+  if(!vacMasivaWizard.animales.length) return;
+  vacMasivaWizard.step = 'final';
+  render();
+}
+function guardarGrupoVacMasiva(){
+  const dosis = document.getElementById('vacm_dosis').value.trim();
+  const repetir = document.getElementById('vacm_repetir').value.trim();
+  if(!trabajoActual.sanidad) trabajoActual.sanidad = {individual:{},masivo:{}};
+  if(!trabajoActual.sanidad.masivo) trabajoActual.sanidad.masivo = {};
+  if(!trabajoActual.sanidad.masivo.vacunacion || !trabajoActual.sanidad.masivo.vacunacion.grupos) trabajoActual.sanidad.masivo.vacunacion = {grupos:[]};
+  trabajoActual.sanidad.masivo.vacunacion.grupos.push({
+    vacunas: vacMasivaWizard.vacunas.slice(),
+    otraTexto: vacMasivaWizard.otraTexto,
+    animales: vacMasivaWizard.animales.slice(),
+    dosis, repetir, repetirHecho: false
+  });
+  vacMasivaWizard = null;
+  render();
+}
+function quitarGrupoVacMasiva(i){
+  trabajoActual.sanidad.masivo.vacunacion.grupos.splice(i,1);
+  render();
+}
+function labelVacunaGrupo(g){
+  return g.vacunas.map(v=> v==='Otra' && g.otraTexto ? `Otra: ${g.otraTexto}` : v).join(', ');
+}
+function catVacMasivaWizardView(){
+  const w = vacMasivaWizard;
+  if(w.step==='vacunas'){
+    return `
+      <button class="backbtn" onclick="vacMasivaWizard=null; render()">‹ Cancelar</button>
+      <div class="sectiontitle">¿Qué vacuna(s)?</div>
+      <div class="fieldnote" style="margin-bottom:6px;">Podés elegir más de una.</div>
+      <div class="optrow" style="flex-wrap:wrap;">${SANIDAD_VACUNAS_BOVINO.map(v=>`<div class="optbtn ${w.vacunas.includes(v)?'selected':''}" onclick="toggleVacMasivaVacuna('${v}')">${v}</div>`).join('')}</div>
+      ${w.vacunas.includes('Otra') ? `<label>¿Cuál?</label><input type="text" id="vacm_otra_texto" placeholder="Especificá la vacuna" value="${escapeHtml(w.otraTexto)}">` : ''}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="avanzarVacMasivaAnimales()" ${w.vacunas.length?'':'disabled'}>Siguiente</button>
+    `;
+  }
+  if(w.step==='animales'){
+    return `
+      <button class="backbtn" onclick="vacMasivaWizard.step='vacunas'; render()">‹ Volver</button>
+      <div class="sectiontitle">${labelVacunaGrupo(w)}</div>
+      <label>Caravana</label>
+      <input type="text" id="vacm_caravana_input" placeholder="Número de caravana" inputmode="numeric">
+      <div class="fieldnote" style="margin:6px 0;">Tocá la categoría del animal para guardarlo y pasar al siguiente.</div>
+      <div class="optrow" style="flex-wrap:wrap;">${SANIDAD_CATEGORIAS_BOVINO.map(c=>`<div class="optbtn" onclick="agregarAnimalVacMasiva('${c}')">${c}</div>`).join('')}</div>
+      <div class="sublist" style="margin-top:12px;">
+        ${w.animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)} — ${a.categoria}</span><button class="removeanimal" onclick="quitarAnimalVacMasiva(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste animales.</div>'}
+      </div>
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="avanzarVacMasivaFinal()" ${w.animales.length?'':'disabled'}>Siguiente</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="vacMasivaWizard.step='animales'; render()">‹ Volver</button>
+    <div class="sectiontitle">${labelVacunaGrupo(w)} (${w.animales.length} animales)</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Opcional — completá solo si hace falta.</div>
+    <label>Dosis</label>
+    <input type="text" id="vacm_dosis" placeholder="Ej: 5 ml">
+    <label>Repetir</label>
+    <input type="text" id="vacm_repetir" placeholder="Ej: a los 21 días, o una fecha">
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarGrupoVacMasiva()">Guardar grupo</button>
+  `;
+}
+function catVacunacionMasivaBovino(){
+  if(vacMasivaWizard) return catVacMasivaWizardView();
+  const grupos = (trabajoActual.sanidad && trabajoActual.sanidad.masivo && trabajoActual.sanidad.masivo.vacunacion && trabajoActual.sanidad.masivo.vacunacion.grupos) || [];
+  return `
+    <button class="backbtn" onclick="sanidadTipoBovino=null; render()">‹ Masivo</button>
+    <div class="sectiontitle">Vacunación (masivo)</div>
+    <button type="button" class="addanimalbtn" onclick="iniciarVacMasivaWizard()">+ Agregar grupo de vacunación</button>
+    ${grupos.length ? grupos.map((g,i)=>`
+      <div class="listcard">
+        <div class="meta"><b>${labelVacunaGrupo(g)}</b><br>
+        Animales: ${g.animales.length} (${g.animales.map(a=>a.caravana+' '+a.categoria).join(', ')})
+        ${g.dosis?`<br>Dosis: ${escapeHtml(g.dosis)}`:''}${g.repetir?`<br>⚠️ Repetir: ${escapeHtml(g.repetir)}`:''}</div>
+        <button class="removeanimal" onclick="quitarGrupoVacMasiva(${i})">✕</button>
+      </div>`).join('') : '<div class="fieldnote">Todavía no cargaste ningún grupo.</div>'}
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="sanidadTipoBovino=null; render()">Listo, volver</button>
+  `;
+}
 function catSanidadBovino(){
-  const s = trabajoActual.sanidad || {individual:{vacunacion:'',desparasitacion:'',otra:''}, masivo:{vacunacion:{filas:[],observaciones:''},desparasitacion:{filas:[],observaciones:''},otra:{filas:[],observaciones:''}}};
+  const s = trabajoActual.sanidad || {individual:{vacunacion:'',desparasitacion:'',otra:''}, masivo:{vacunacion:{grupos:[]},desparasitacion:{filas:[],observaciones:''},otra:{filas:[],observaciones:''}}};
   const labels={vacunacion:'Vacunación',desparasitacion:'Desparasitación',otra:'Otra'};
   if(sanidadModoBovino && sanidadTipoBovino){
     if(sanidadModoBovino==='individual'){
@@ -1992,6 +2149,9 @@ function catSanidadBovino(){
         <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSanidadIndividualBovino()">Listo, volver</button>
       `;
     } else {
+      if(sanidadTipoBovino==='vacunacion'){
+        return catVacunacionMasivaBovino();
+      }
       const grupo = (s.masivo||{})[sanidadTipoBovino] || {filas:[],observaciones:''};
       window._sanMasivoTmp = grupo.filas && grupo.filas.length ? JSON.parse(JSON.stringify(grupo.filas)) : [{caravana:'',producto:'',dosis:'',repetir:''}];
       return `
@@ -2734,7 +2894,18 @@ function resumenTrabajoBovino(t){
   if(t.sanidad && hasData(t.sanidad)){
     out += `\nSanidad:\n`;
     if(t.sanidad.individual) Object.entries(t.sanidad.individual).forEach(([k,v])=>{ if(hasData(v)) out += `  Individual - ${k}: ${campoResumen(v)}\n`; });
-    if(t.sanidad.masivo) Object.entries(t.sanidad.masivo).forEach(([k,v])=>{ if(v && v.filas && v.filas.length) out += `  Masivo - ${k}: ${v.filas.length} animales\n`; });
+    if(t.sanidad.masivo) Object.entries(t.sanidad.masivo).forEach(([k,v])=>{
+      if(k==='vacunacion' && v && v.grupos && v.grupos.length){
+        out += `  Masivo - Vacunación:\n`;
+        v.grupos.forEach(g=>{
+          out += `    ${labelVacunaGrupo(g)} — ${g.animales.length} animales (${g.animales.map(a=>a.caravana+' '+a.categoria).join(', ')})\n`;
+          if(g.dosis) out += `      Dosis: ${g.dosis}\n`;
+          if(g.repetir) out += `      ⚠️ REPETIR: ${g.repetir}\n`;
+        });
+      } else if(v && v.filas && v.filas.length){
+        out += `  Masivo - ${k}: ${v.filas.length} animales\n`;
+      }
+    });
   }
   if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
   if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
