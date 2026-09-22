@@ -826,7 +826,7 @@ function iniciarBovino(){
     examenAndrologico: {},
     examenesComplementarios: {datosAnimal:{caravana:''}, sangradoMasivo:{tubos:[], observaciones:''}},
     procedimientosQuirurgicos: {},
-    tratamiento: {individual:{texto:'',fotos:[]}, masivo:{filas:[], observaciones:''}},
+    tratamiento: {individual:{texto:'',fotos:[]}, masivo:{grupos:[]}},
     sanidad: {individual:{vacunacion:{texto:'',fotos:[]},desparasitacion:{texto:'',fotos:[]},otra:{texto:'',fotos:[]}}, masivo:{vacunacion:{grupos:[]}, desparasitacion:{filas:[],observaciones:''}, otra:{filas:[],observaciones:''}}},
     otroProcedimiento: {texto:'', fotos:[]},
     observacionesFinales: {texto:'', fotos:[]}
@@ -1960,8 +1960,87 @@ function guardarSistemaQuirurgicoBovino(){
 function guardarQuirurgicosBovinoFinal(estado){ finalizarGuardado(estado); }
 
 // --- Tratamiento (Bovino) ---
+// --- Tratamiento masivo (Bovino) ---
+let tratMasivaWizard = null; // {step:'descripcion'|'animales', descripcion:'', animales:[{caravana,categoria,observacion}]}
+function iniciarTratMasivaWizard(){
+  tratMasivaWizard = {step:'descripcion', descripcion:'', animales:[]};
+  render();
+}
+function avanzarTratMasivaAnimales(){
+  const el = document.getElementById('tratm_descripcion');
+  const val = el ? el.value.trim() : '';
+  if(!val) return;
+  tratMasivaWizard.descripcion = val;
+  tratMasivaWizard.step = 'animales';
+  render();
+}
+function agregarAnimalTratMasiva(categoria){
+  const inputCar = document.getElementById('tratm_caravana_input');
+  const inputObs = document.getElementById('tratm_obs_input');
+  const caravana = inputCar ? inputCar.value.trim() : '';
+  if(!caravana) return;
+  const observacion = inputObs ? inputObs.value.trim() : '';
+  tratMasivaWizard.animales.push({caravana, categoria, observacion});
+  render();
+  setTimeout(()=>{
+    const el1=document.getElementById('tratm_caravana_input'); if(el1){ el1.value=''; el1.focus(); }
+    const el2=document.getElementById('tratm_obs_input'); if(el2){ el2.value=''; }
+  }, 0);
+}
+function quitarAnimalTratMasiva(i){ tratMasivaWizard.animales.splice(i,1); render(); }
+function guardarGrupoTratMasiva(){
+  if(!tratMasivaWizard.animales.length) return;
+  if(!trabajoActual.tratamiento) trabajoActual.tratamiento = {individual:{texto:'',fotos:[]},masivo:{grupos:[]}};
+  if(!trabajoActual.tratamiento.masivo || !trabajoActual.tratamiento.masivo.grupos) trabajoActual.tratamiento.masivo = {grupos:[]};
+  trabajoActual.tratamiento.masivo.grupos.push({descripcion: tratMasivaWizard.descripcion, animales: tratMasivaWizard.animales.slice()});
+  tratMasivaWizard = null;
+  render();
+}
+function quitarGrupoTratMasiva(i){ trabajoActual.tratamiento.masivo.grupos.splice(i,1); render(); }
+function catTratMasivaWizardView(){
+  const w = tratMasivaWizard;
+  if(w.step==='descripcion'){
+    return `
+      <button class="backbtn" onclick="tratMasivaWizard=null; render()">‹ Cancelar</button>
+      <div class="sectiontitle">Tratamiento a aplicar</div>
+      <div class="fieldnote" style="margin-bottom:6px;">Describí el tratamiento: producto(s), dosis, frecuencia, cuándo repetir...</div>
+      <textarea id="tratm_descripcion" placeholder="Ej: Ivermectina 1%, 1ml cada 50kg, repetir a los 60 días">${escapeHtml(w.descripcion)}</textarea>
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="avanzarTratMasivaAnimales()">Continuar</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="tratMasivaWizard.step='descripcion'; render()">‹ Volver</button>
+    <div class="sectiontitle">${escapeHtml(w.descripcion)}</div>
+    <label>Caravana</label>
+    <input type="text" id="tratm_caravana_input" placeholder="Número de caravana" inputmode="numeric">
+    <label>Observación (opcional)</label>
+    <input type="text" id="tratm_obs_input" placeholder="Ej: color, propietario, algún dato de este animal...">
+    <div class="fieldnote" style="margin:6px 0;">Tocá la categoría del animal para guardarlo y pasar al siguiente.</div>
+    <div class="optrow" style="flex-wrap:wrap;">${SANIDAD_CATEGORIAS_BOVINO.map(c=>`<div class="optbtn" onclick="agregarAnimalTratMasiva('${c}')">${c}</div>`).join('')}</div>
+    <div class="sublist" style="margin-top:12px;">
+      ${w.animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)} — ${a.categoria}${a.observacion?' · '+escapeHtml(a.observacion):''}</span><button class="removeanimal" onclick="quitarAnimalTratMasiva(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste animales.</div>'}
+    </div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarGrupoTratMasiva()" ${w.animales.length?'':'disabled'}>Guardar grupo</button>
+  `;
+}
+function catTratamientoMasivoBovino(){
+  if(tratMasivaWizard) return catTratMasivaWizardView();
+  const grupos = (trabajoActual.tratamiento && trabajoActual.tratamiento.masivo && trabajoActual.tratamiento.masivo.grupos) || [];
+  return `
+    <button class="backbtn" onclick="tratamientoModoBovino=null; render()">‹ Tratamiento</button>
+    <div class="sectiontitle">Tratamiento (masivo)</div>
+    <button type="button" class="addanimalbtn" onclick="iniciarTratMasivaWizard()">+ Agregar grupo de tratamiento</button>
+    ${grupos.length ? grupos.map((g,i)=>`
+      <div class="listcard">
+        <div class="meta"><b>${escapeHtml(g.descripcion)}</b><br>
+        Animales: ${g.animales.length} (${g.animales.map(a=>a.caravana+' '+a.categoria).join(', ')})</div>
+        <button class="removeanimal" onclick="quitarGrupoTratMasiva(${i})">✕</button>
+      </div>`).join('') : '<div class="fieldnote">Todavía no cargaste ningún grupo.</div>'}
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="tratamientoModoBovino=null; render()">Listo, volver</button>
+  `;
+}
 function catTratamientoBovino(){
-  const t = trabajoActual.tratamiento || {individual:'', masivo:{filas:[],observaciones:''}};
+  const t = trabajoActual.tratamiento || {individual:'', masivo:{grupos:[]}};
   if(tratamientoModoBovino==='individual'){
     const dato = t.individual && typeof t.individual==='object' ? t.individual : {texto:t.individual||'', fotos:[]};
     return `
@@ -1973,49 +2052,22 @@ function catTratamientoBovino(){
     `;
   }
   if(tratamientoModoBovino==='masivo'){
-    window._tratMasivoTmp = t.masivo && t.masivo.filas && t.masivo.filas.length ? JSON.parse(JSON.stringify(t.masivo.filas)) : [{caravana:'',producto:'',dosis:'',repetir:''}];
-    return `
-      <button class="backbtn" onclick="tratamientoModoBovino=null; render()">‹ Tratamiento</button>
-      <div class="sectiontitle">Tratamiento masivo</div>
-      <div id="tratMasivoList"></div>
-      <button type="button" class="addanimalbtn" onclick="agregarFilaTratMasivo()">+ Agregar animal</button>
-      <label>Observaciones</label>
-      <textarea id="trb_obs" placeholder="Ej: se trataron 40 animales con tal producto, se repite tal fecha...">${escapeHtml((t.masivo||{}).observaciones||'')}</textarea>
-      <button class="btn btn-teal" onclick="guardarTratamientoMasivoBovino()">Listo, volver</button>
-    `;
+    return catTratamientoMasivoBovino();
   }
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
     <div class="sectiontitle">Tratamiento</div>
     <div class="sublist">
       <div class="subtile" onclick="tratamientoModoBovino='individual'; render()"><span>Individual</span>${hasData(t.individual)?'<span class="check">✓</span>':''}</div>
-      <div class="subtile" onclick="tratamientoModoBovino='masivo'; render()"><span>Masivo</span>${(t.masivo&&t.masivo.filas&&t.masivo.filas.length)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="tratamientoModoBovino='masivo'; render()"><span>Masivo</span>${(t.masivo&&t.masivo.grupos&&t.masivo.grupos.length)?'<span class="check">✓</span>':''}</div>
     </div>
     ${botonGuardarSimple('guardarTratamientoBovinoFinal')}
   `;
 }
 function guardarTratamientoIndividualBovino(){
-  if(!trabajoActual.tratamiento) trabajoActual.tratamiento={individual:{texto:'',fotos:[]},masivo:{filas:[],observaciones:''}};
+  if(!trabajoActual.tratamiento) trabajoActual.tratamiento={individual:{texto:'',fotos:[]},masivo:{grupos:[]}};
   const previo = (trabajoActual.tratamiento.individual && typeof trabajoActual.tratamiento.individual==='object') ? trabajoActual.tratamiento.individual : {fotos:[]};
   trabajoActual.tratamiento.individual = {texto: document.getElementById('trb_ind').value.trim(), fotos: previo.fotos||[]};
-  tratamientoModoBovino=null; render();
-}
-function renderTratMasivoList(){
-  const el = document.getElementById('tratMasivoList'); if(!el) return;
-  el.innerHTML = window._tratMasivoTmp.map((f,i)=>`
-    <div class="animalrow">
-      <input type="text" placeholder="Caravana" value="${escapeHtml(f.caravana)}" onchange="window._tratMasivoTmp[${i}].caravana=this.value">
-      <input type="text" placeholder="Producto" value="${escapeHtml(f.producto)}" onchange="window._tratMasivoTmp[${i}].producto=this.value">
-      <input type="text" placeholder="Dosis" value="${escapeHtml(f.dosis)}" onchange="window._tratMasivoTmp[${i}].dosis=this.value">
-      <input type="text" placeholder="Repetir" value="${escapeHtml(f.repetir)}" onchange="window._tratMasivoTmp[${i}].repetir=this.value">
-      ${window._tratMasivoTmp.length>1 ? `<button class="removeanimal" onclick="quitarFilaTratMasivo(${i})">✕</button>` : ''}
-    </div>`).join('');
-}
-function agregarFilaTratMasivo(){ window._tratMasivoTmp.push({caravana:'',producto:'',dosis:'',repetir:''}); renderTratMasivoList(); }
-function quitarFilaTratMasivo(i){ window._tratMasivoTmp.splice(i,1); renderTratMasivoList(); }
-function guardarTratamientoMasivoBovino(){
-  if(!trabajoActual.tratamiento) trabajoActual.tratamiento={individual:'',masivo:{filas:[],observaciones:''}};
-  trabajoActual.tratamiento.masivo = {filas: window._tratMasivoTmp, observaciones: document.getElementById('trb_obs').value.trim()};
   tratamientoModoBovino=null; render();
 }
 function guardarTratamientoBovinoFinal(estado){ finalizarGuardado(estado); }
@@ -2221,7 +2273,6 @@ render = function(){
   if(view==='equino-complementarios' && complementarioActivo==='sangradoMasivo') renderTubosList();
   if(view==='equino-sanidad' && sanidadMasivaActiva) renderSanidadFilas();
   if(view==='bovino-complementarios' && complementarioActivoBovino==='sangradoMasivo') renderTubosBovinoList();
-  if(view==='bovino-tratamiento' && tratamientoModoBovino==='masivo') renderTratMasivoList();
   if(view==='bovino-sanidad' && sanidadModoBovino && sanidadTipoBovino) renderSanMasivoList();
 };
 
@@ -2886,26 +2937,33 @@ function resumenTrabajoBovino(t){
     Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (caravana ${v.caravana||'—'})\n    Qué se hizo: ${campoResumen(v)}\n`; });
     out += resumenPatologiasPodales(t.procedimientosQuirurgicos);
   }
-  if(t.tratamiento && hasData(t.tratamiento)){
-    out += `\nTratamiento:\n`;
-    if(hasData(t.tratamiento.individual)) out += `  Individual: ${campoResumen(t.tratamiento.individual)}\n`;
-    if(t.tratamiento.masivo && t.tratamiento.masivo.filas && t.tratamiento.masivo.filas.length) out += `  Masivo: ${t.tratamiento.masivo.filas.length} animales\n`;
-  }
   if(t.sanidad && hasData(t.sanidad)){
     out += `\nSanidad:\n`;
     if(t.sanidad.individual) Object.entries(t.sanidad.individual).forEach(([k,v])=>{ if(hasData(v)) out += `  Individual - ${k}: ${campoResumen(v)}\n`; });
     if(t.sanidad.masivo) Object.entries(t.sanidad.masivo).forEach(([k,v])=>{
       if(k==='vacunacion' && v && v.grupos && v.grupos.length){
-        out += `  Masivo - Vacunación:\n`;
         v.grupos.forEach(g=>{
-          out += `    ${labelVacunaGrupo(g)} — ${g.animales.length} animales (${g.animales.map(a=>a.caravana+' '+a.categoria).join(', ')})\n`;
-          if(g.dosis) out += `      Dosis: ${g.dosis}\n`;
-          if(g.repetir) out += `      ⚠️ REPETIR: ${g.repetir}\n`;
+          out += `  Vacuna: ${labelVacunaGrupo(g)}\n`;
+          if(g.dosis) out += `    Dosis: ${g.dosis}\n`;
+          if(g.repetir) out += `    ⚠️ REPETIR: ${g.repetir}\n`;
+          out += `    Animales tratados: ${g.animales.length}\n`;
+          g.animales.forEach(a=> out += `      ${a.caravana} - ${a.categoria}\n`);
         });
       } else if(v && v.filas && v.filas.length){
         out += `  Masivo - ${k}: ${v.filas.length} animales\n`;
       }
     });
+  }
+  if(t.tratamiento && hasData(t.tratamiento)){
+    out += `\nTratamiento:\n`;
+    if(hasData(t.tratamiento.individual)) out += `  Individual: ${campoResumen(t.tratamiento.individual)}\n`;
+    if(t.tratamiento.masivo && t.tratamiento.masivo.grupos && t.tratamiento.masivo.grupos.length){
+      t.tratamiento.masivo.grupos.forEach(g=>{
+        out += `  Tratamiento utilizado: ${g.descripcion}\n`;
+        out += `    Animales tratados: ${g.animales.length}\n`;
+        g.animales.forEach(a=> out += `      ${a.caravana} - ${a.categoria}${a.observacion?' — '+a.observacion:''}\n`);
+      });
+    }
   }
   if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
   if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
