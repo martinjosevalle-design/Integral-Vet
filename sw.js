@@ -7,9 +7,9 @@
 // (Firestore con persistencia local activada). Meternos ahí podría romper esa sincronización.
 //
 // Si en el futuro hacés un cambio grande y notás que el ícono no actualiza, subí este
-// archivo con CACHE_VERSION cambiado (ej: 'integral-vet-v4') para forzar una caché nueva.
+// archivo con CACHE_VERSION cambiado (ej: 'integral-vet-v5') para forzar una caché nueva.
 
-const CACHE_VERSION = 'integral-vet-v3';
+const CACHE_VERSION = 'integral-vet-v4';
 
 const APP_SHELL = [
   './',
@@ -35,9 +35,18 @@ function esCacheable(url) {
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_VERSION)
-      .then(cache => cache.addAll(APP_SHELL))
-      .catch(err => console.warn('Precache falló (revisar conexión):', err))
+    caches.open(CACHE_VERSION).then(cache =>
+      // IMPORTANTE: guardamos cada archivo por separado (no con cache.addAll),
+      // porque addAll es todo-o-nada: si UNO solo falla al bajar, no se guarda
+      // NINGUNO, y la app queda sin nada para mostrar offline. Así, si el
+      // celular tiene un hipo de conexión bajando un solo archivo, el resto
+      // igual queda guardado — lo más importante (index.html) casi siempre entra.
+      Promise.all(APP_SHELL.map(url =>
+        fetch(url)
+          .then(res => { if (res && res.ok) return cache.put(url, res); })
+          .catch(err => console.warn('No se pudo precachear', url, err))
+      ))
+    )
   );
 });
 
