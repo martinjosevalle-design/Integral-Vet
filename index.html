@@ -215,6 +215,7 @@ db.enablePersistence({synchronizeTabs:true}).catch(function(err){
 // ---------------- STATE ----------------
 let clientes = [];
 let trabajos = [];
+let eventos = [];
 let auth = null;          // {usuario}
 let sesionActiva = false;
 let view = 'login';
@@ -245,6 +246,29 @@ const PODAL_MIEMBROS = [
 const PODAL_PROCEDIMIENTOS_FULL = ['Desvasado funcional','Lavaje','Amputación','Cauterización','Colocación de sulfato de cobre','Vendaje','Antibiótico terapia'];
 const SANIDAD_CATEGORIAS_BOVINO = ['Toro','Vaca','Vaquillona','Torito','Novillo','Ternero','Ternera'];
 const SANIDAD_VACUNAS_BOVINO = ['Complejo respiratorio y queratoconjuntivitis','Clostridiales','Neonatal','Reproductiva','Diarrea viral bovina','Triple','Otra'];
+const MUESTRA_TIPOS = [
+  {id:'sangre', lab:'Sangre'},
+  {id:'orina', lab:'Orina'},
+  {id:'materiaFecal', lab:'Materia fecal'},
+  {id:'tejido', lab:'Tejido'},
+  {id:'exudado', lab:'Exudado'},
+  {id:'medulaOsea', lab:'Médula ósea'},
+  {id:'liquidoCefalorraquideo', lab:'Líquido cefalorraquídeo'},
+  {id:'otro', lab:'Otro'},
+];
+const MUESTRA_ANALISIS_VENOPUNCION = ['Hemograma completo','Proteínas totales','Urea/Creatinina','Perfil hepático','Perfil renal','Ácidos grasos','Triglicéridos','Glucemia','Hemocultivo','Perfil de rendimiento','Minerales','Enfermedades venéreas','Bilirrubina','Otros'];
+const MUESTRA_MINERALES = ['Calcio','Fósforo','Magnesio','Hierro','Cobre','Selenio','Otro'];
+const MUESTRA_VENEREAS = ['P.I. común','Brucela','Neospora','Otro'];
+const MUESTRA_ANALISIS_ORINA = ['Células','Sedimento','Cultivo','Glucosa','Cuerpos cetónicos','Pigmento','Otro'];
+const MUESTRA_TECNICAS = {
+  sangre: ['Venopunción','Punción'],
+  orina: ['Sondaje','Punción'],
+  materiaFecal: ['Directa','Indirecta'],
+  tejido: ['Biopsia','Contacto','Hisopado','PAF','PAAF'],
+  exudado: ['Contacto','Hisopado'],
+  medulaOsea: ['Punción','Aspiración'],
+  liquidoCefalorraquideo: ['Punción'],
+};
 const SISTEMA_ICONOS = {'Respiratorio':'🫁','Digestivo':'🍽️','Circulatorio':'🫀','Locomotor':'🦴','Urogenital':'💧','Neurológico':'🧠','Tegumentario':'🩹','Sentidos especiales':'👁️'};
 function iconoSistema(s){
   if(s==='Digestivo'){
@@ -268,10 +292,12 @@ const VACUNAS = [
 // ---------------- STORAGE (Firebase, offline-first) ----------------
 let unsubClientes = null;
 let unsubTrabajos = null;
+let unsubEventos = null;
 
 function attachListeners(){
   if(unsubClientes) unsubClientes();
   if(unsubTrabajos) unsubTrabajos();
+  if(unsubEventos) unsubEventos();
   unsubClientes = db.collection('clientes').onSnapshot(function(snap){
     clientes = snap.docs.map(function(d){ return d.data(); });
     if(sesionActiva) render();
@@ -280,16 +306,23 @@ function attachListeners(){
     trabajos = snap.docs.map(function(d){ return d.data(); });
     if(sesionActiva) render();
   }, function(err){ console.error('Error sincronizando trabajos', err); });
+  unsubEventos = db.collection('eventos').onSnapshot(function(snap){
+    eventos = snap.docs.map(function(d){ return d.data(); });
+    if(sesionActiva) render();
+  }, function(err){ console.error('Error sincronizando eventos', err); });
 }
 function detachListeners(){
   if(unsubClientes){ unsubClientes(); unsubClientes=null; }
   if(unsubTrabajos){ unsubTrabajos(); unsubTrabajos=null; }
+  if(unsubEventos){ unsubEventos(); unsubEventos=null; }
 }
 function saveClienteDoc(c){ db.collection('clientes').doc(c.id).set(c).catch(function(err){ console.error(err); }); }
 function deleteClienteDoc(id){ db.collection('clientes').doc(id).delete().catch(function(err){ console.error(err); }); }
 function saveTrabajoDoc(t){ db.collection('trabajos').doc(t.id).set(t).catch(function(err){ console.error(err); showToast('No se pudo guardar (¿informe muy pesado en fotos?)'); }); }
 function updateTrabajoDoc(id, campos){ db.collection('trabajos').doc(id).update(campos).catch(function(err){ console.error(err); }); }
 function deleteTrabajoDoc(id){ db.collection('trabajos').doc(id).delete().catch(function(err){ console.error(err); }); }
+function saveEventoDoc(e){ db.collection('eventos').doc(e.id).set(e).catch(function(err){ console.error(err); }); }
+function deleteEventoDoc(id){ db.collection('eventos').doc(id).delete().catch(function(err){ console.error(err); }); }
 
 window.addEventListener('online', function(){ showToast('Conectado — sincronizando cambios'); });
 window.addEventListener('offline', function(){ showToast('Sin conexión — los cambios se guardan en el dispositivo'); });
@@ -359,7 +392,7 @@ function renderNav(){
     {id:'home', icon:'🏠', lab:'Inicio'},
     {id:'clientes', icon:'👤', lab:'Clientes'},
     {id:'nuevoTrabajoEspecie', icon:'➕', lab:'Nuevo'},
-    {id:'historial', icon:'🔍', lab:'Historial'},
+    {id:'historial', icon:'📊', lab:'Estadísticas'},
     {id:'informes', icon:'📄', lab:'Informes'},
   ];
   const nav = document.getElementById('bottomnav');
@@ -372,6 +405,7 @@ function renderNav(){
 function salirANuevaSeccion(id){
   editingId=null; trabajoActual=null; clienteContexto=null; clienteEstablecimientoContexto=null; historialModo=null;
   informesModo=null; informesBusquedaModo=null; informeVerId=null;
+  statsSubModo=null; statsClienteId=null; statsClienteBusqueda=''; statsDesde=''; statsHasta=''; statsCategoria=null; statsPaso='cliente';
   navigate(id);
 }
 
@@ -399,11 +433,13 @@ function render(){
   else if(view.startsWith('bovino-')) main.innerHTML = viewBovinoCategoria(view.replace('bovino-',''));
   else if(view==='mascotaCategorias') main.innerHTML = viewMascotaCategorias();
   else if(view==='mascota-general') main.innerHTML = catMascotaGeneral();
+  else if(view==='mascota-nutricion') main.innerHTML = catNutricion("navigate('mascotaCategorias')", 'guardarNutricionMascotaTop');
   else if(view==='mascota-procedimientos') main.innerHTML = catMascotaProcedimientos();
   else if(view==='historial') main.innerHTML = viewHistorial();
   else if(view==='trabajoDetalle') main.innerHTML = viewTrabajoDetalle();
   else if(view==='informes') main.innerHTML = viewInformes();
   else if(view==='informe-ver') main.innerHTML = viewInformeCompleto();
+  else if(view==='calendario') main.innerHTML = viewCalendario();
   afterRenderHooks();
 }
 function afterRenderHooks(){
@@ -569,13 +605,23 @@ function proximasVacunas(){
   resultado.sort((a,b)=>a.fecha.localeCompare(b.fecha));
   return resultado;
 }
+function recordatoriosCalendario(){
+  const hoy = hoyISO();
+  const limite = sumarDias(hoy, 2);
+  return eventos.filter(e=>e.fecha && e.fecha>=hoy && e.fecha<=limite).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+}
 function viewHome(){
   const hoy = hoyISO();
   const en7 = sumarDias(hoy, 7);
   const enCurso = trabajos.filter(t=>t.estado==='parcial').length;
   const vacunas = proximasVacunas();
   const recVacMasivas = recordatoriosVacunasMasivas();
+  const recCalendario = recordatoriosCalendario();
   return `
+    ${recCalendario.length ? `
+      <div class="sectiontitle">Próximos eventos (48 hs)</div>
+      ${recCalendario.map(e=>`<div class="alertcard"><b>${fmtFecha(e.fecha)}</b> — ${escapeHtml(e.nota)}</div>`).join('')}
+    ` : ''}
     ${recVacMasivas.length ? `
       <div class="sectiontitle">Vacunas a repetir</div>
       ${recVacMasivas.map(r=>{
@@ -610,13 +656,17 @@ function viewHome(){
         <div><div class="label">Nuevo trabajo</div><div class="desc">Iniciar o continuar</div></div>
       </button>
       <button class="tile purple" onclick="salirANuevaSeccion('historial')">
-        <div class="icon">🕒</div>
-        <div><div class="label">Historial</div><div class="desc">Trabajos realizados</div></div>
+        <div class="icon">📊</div>
+        <div><div class="label">Estadísticas</div><div class="desc">Resumen por cliente</div></div>
       </button>
       <button class="tile blue" onclick="salirANuevaSeccion('informes')">
         <div class="icon">📄</div>
         <div><div class="label">Informes</div><div class="desc">Ver y compartir</div></div>
       </button>
+    </div>
+    <div class="listcard" onclick="salirANuevaSeccion('calendario')" style="display:flex; align-items:center; gap:12px; margin-top:12px;">
+      <span style="font-size:22px;">🗓️</span>
+      <div><div class="name">Calendario</div><div class="meta">Notas y recordatorios</div></div>
     </div>
     ${enCurso ? `<div class="sectiontitle">Tenés ${enCurso} trabajo${enCurso===1?'':'s'} en curso</div>
       <div class="fieldnote" style="margin-bottom:8px;">Buscalos en Historial para continuarlos.</div>` : ''}
@@ -881,6 +931,8 @@ function viewEquinoCategorias(){
     {id:'quirurgicos', emoji:'🔪', lab:'Procedimientos quirúrgicos', has: hasData(t.procedimientosQuirurgicos)},
     {id:'tratamiento', emoji:'💉', lab:'Tratamiento', has: hasData(t.tratamiento)},
     {id:'sanidad', emoji:'💉', lab:'Sanidad', has: hasData(t.sanidad)},
+    {id:'necropsia', emoji:'⚰️', lab:'Necropsia', has: hasData(t.necropsia)},
+    {id:'nutricion', emoji:'🌾', lab:'Nutrición', has: hasData(t.nutricion)},
     {id:'otro', emoji:'➕', lab:'Otro procedimiento', has: hasData(t.otroProcedimiento)},
     {id:'observaciones', emoji:'📝', lab:'Observaciones', has: hasData(t.observacionesFinales)},
   ];
@@ -921,6 +973,8 @@ function viewEquinoCategoria(cat){
   if(cat==='quirurgicos') return catQuirurgicos();
   if(cat==='tratamiento') return catTratamiento();
   if(cat==='sanidad') return catSanidad();
+  if(cat==='necropsia') return catNecropsia("volverACategorias()", 'guardarNecropsiaFinal');
+  if(cat==='nutricion') return catNutricion("volverACategorias()", 'guardarNutricion');
   if(cat==='otro') return catOtro();
   if(cat==='observaciones') return catObservaciones();
   return '';
@@ -1079,10 +1133,376 @@ function guardarRepro(estado){
   finalizarGuardado(estado);
 }
 
+// --- Toma de muestra (compartido entre especies) ---
+let muestraContexto = null; // 'equino'|'bovino'|'mascota'
+let muestraStep = null; // 'tipos'|'config'|'modo'|'datos'|'observaciones'
+let muestraConfigTipo = null;
+function iniciarTomaMuestra(contexto, targetKey){
+  muestraContexto = contexto;
+  const ex = trabajoActual.examenesComplementarios;
+  if(!ex[targetKey]) ex[targetKey] = {tipos:[], detalle:{}, modo:null, individual:{}, masivo:{animales:[]}, observaciones:''};
+  window._muestraTargetKey = targetKey;
+  muestraStep = 'tipos';
+  render();
+}
+function muestraObjetoActual(){ return trabajoActual.examenesComplementarios[window._muestraTargetKey]; }
+function volverDesdeMuestra(){
+  const volverA = muestraContexto;
+  muestraStep = null; muestraContexto = null; muestraConfigTipo=null;
+  if(volverA==='equino') navigate('equino-complementarios');
+  else if(volverA==='bovino') render();
+  else render();
+}
+function catTomaMuestra(){
+  const tm = muestraObjetoActual();
+  if(muestraStep==='tipos') return muestraPasoTipos(tm);
+  if(muestraStep==='config') return muestraPasoConfig(tm);
+  if(muestraStep==='modo') return muestraPasoModo(tm);
+  if(muestraStep==='datos') return muestraPasoDatos(tm);
+  if(muestraStep==='observaciones') return muestraPasoObservaciones(tm);
+  return '';
+}
+function toggleMuestraTipo(id){
+  const tm = muestraObjetoActual();
+  const i = tm.tipos.indexOf(id);
+  if(i>=0) tm.tipos.splice(i,1); else tm.tipos.push(id);
+  render();
+}
+function muestraPasoTipos(tm){
+  return `
+    <button class="backbtn" onclick="volverDesdeMuestra()">‹ Exámenes complementarios</button>
+    <div class="sectiontitle">Toma de muestra</div>
+    <div class="fieldnote" style="margin-bottom:6px;">¿Qué tipo(s) de muestra vas a tomar?</div>
+    <div class="optrow" style="flex-wrap:wrap;">${MUESTRA_TIPOS.map(t=>`<div class="optbtn ${tm.tipos.includes(t.id)?'selected':''}" onclick="toggleMuestraTipo('${t.id}')">${t.lab}</div>`).join('')}</div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraStep='config'; render()" ${tm.tipos.length?'':'disabled'}>Siguiente</button>
+  `;
+}
+function muestraTipoConfigurado(tm, tipoId){
+  const d = tm.detalle[tipoId];
+  if(!d) return false;
+  if(tipoId==='otro') return !!(d.texto && d.texto.trim());
+  return !!d.tecnica;
+}
+function muestraPasoConfig(tm){
+  if(muestraConfigTipo) return muestraConfigurarTipo(tm, muestraConfigTipo);
+  return `
+    <button class="backbtn" onclick="muestraStep='tipos'; render()">‹ Volver</button>
+    <div class="sectiontitle">Configurá cada muestra</div>
+    <div class="sublist">
+      ${tm.tipos.map(id=>{
+        const lab = MUESTRA_TIPOS.find(t=>t.id===id).lab;
+        return `<div class="subtile" onclick="muestraConfigTipo='${id}'; render()"><span>${lab}</span>${muestraTipoConfigurado(tm,id)?'<span class="check">✓</span>':''}</div>`;
+      }).join('')}
+    </div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraStep='modo'; render()">Siguiente</button>
+  `;
+}
+function muestraSetDetalle(tipoId, campo, valor){
+  const tm = muestraObjetoActual();
+  if(!tm.detalle[tipoId]) tm.detalle[tipoId] = {};
+  tm.detalle[tipoId][campo] = valor;
+  render();
+}
+function muestraToggleDetalleArr(tipoId, campo, valor){
+  const tm = muestraObjetoActual();
+  if(!tm.detalle[tipoId]) tm.detalle[tipoId] = {};
+  if(!tm.detalle[tipoId][campo]) tm.detalle[tipoId][campo] = [];
+  const arr = tm.detalle[tipoId][campo];
+  const i = arr.indexOf(valor);
+  if(i>=0) arr.splice(i,1); else arr.push(valor);
+  render();
+}
+function muestraConfigurarTipo(tm, tipoId){
+  const d = tm.detalle[tipoId] || {};
+  const volver = "muestraConfigTipo=null; render()";
+  const lab = MUESTRA_TIPOS.find(t=>t.id===tipoId).lab;
+
+  if(tipoId==='otro'){
+    return `
+      <button class="backbtn" onclick="${volver}">‹ Volver</button>
+      <div class="sectiontitle">${lab}</div>
+      <textarea id="muestra_otro_texto" placeholder="Describí la muestra...">${escapeHtml(d.texto||'')}</textarea>
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraSetDetalle('otro','texto', document.getElementById('muestra_otro_texto').value.trim()); muestraConfigTipo=null; render()">Listo</button>
+    `;
+  }
+
+  if(tipoId==='tejido' || tipoId==='exudado'){
+    const tecnicas = MUESTRA_TECNICAS[tipoId];
+    return `
+      <button class="backbtn" onclick="${volver}">‹ Volver</button>
+      <div class="sectiontitle">${lab}</div>
+      <div class="fieldnote" style="margin-bottom:6px;">Técnica</div>
+      <div class="optrow" style="flex-wrap:wrap;">${tecnicas.map(o=>`<div class="optbtn ${d.tecnica===o?'selected':''}" onclick="muestraSetDetalle('${tipoId}','tecnica','${o}')">${o}</div>`).join('')}</div>
+      <label>Descripción</label>
+      <textarea id="muestra_${tipoId}_texto" placeholder="Describí el tipo de ${lab.toLowerCase()} y lo que encontraste...">${escapeHtml(d.texto||'')}</textarea>
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraSetDetalle('${tipoId}','texto', document.getElementById('muestra_${tipoId}_texto').value.trim()); muestraConfigTipo=null; render()">Listo</button>
+    `;
+  }
+
+  if(tipoId==='liquidoCefalorraquideo'){
+    return `
+      <button class="backbtn" onclick="${volver}">‹ Volver</button>
+      <div class="sectiontitle">${lab}</div>
+      <div class="fieldnote" style="margin-bottom:6px;">Técnica: Punción</div>
+      <label>Descripción</label>
+      <textarea id="muestra_lcr_texto" placeholder="Detalle...">${escapeHtml(d.texto||'')}</textarea>
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraSetDetalle('liquidoCefalorraquideo','tecnica','Punción'); muestraSetDetalle('liquidoCefalorraquideo','texto', document.getElementById('muestra_lcr_texto').value.trim()); muestraConfigTipo=null; render()">Listo</button>
+    `;
+  }
+
+  if(tipoId==='medulaOsea'){
+    return `
+      <button class="backbtn" onclick="${volver}">‹ Volver</button>
+      <div class="sectiontitle">${lab}</div>
+      <div class="fieldnote" style="margin-bottom:6px;">Técnica</div>
+      <div class="optrow">${MUESTRA_TECNICAS.medulaOsea.map(o=>`<div class="optbtn ${d.tecnica===o?'selected':''}" onclick="muestraSetDetalle('medulaOsea','tecnica','${o}')">${o}</div>`).join('')}</div>
+      <div class="fieldnote" style="margin:10px 0 6px;">Análisis</div>
+      <div class="optrow">
+        <div class="optbtn ${(d.analisis||[]).includes('Frotis')?'selected':''}" onclick="muestraToggleDetalleArr('medulaOsea','analisis','Frotis')">Frotis</div>
+        <div class="optbtn ${(d.analisis||[]).includes('Otro')?'selected':''}" onclick="muestraToggleDetalleArr('medulaOsea','analisis','Otro')">Otro</div>
+      </div>
+      ${(d.analisis||[]).includes('Otro') ? `<label>¿Cuál?</label><input type="text" id="muestra_medulaOsea_otro" value="${escapeHtml(d.otroTexto||'')}">` : ''}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="${(d.analisis||[]).includes('Otro') ? `muestraSetDetalle('medulaOsea','otroTexto', document.getElementById('muestra_medulaOsea_otro').value.trim()); ` : ''}muestraConfigTipo=null; render()">Listo</button>
+    `;
+  }
+
+  if(tipoId==='materiaFecal'){
+    return `
+      <button class="backbtn" onclick="${volver}">‹ Volver</button>
+      <div class="sectiontitle">${lab}</div>
+      <div class="fieldnote" style="margin-bottom:6px;">Técnica</div>
+      <div class="optrow">${MUESTRA_TECNICAS.materiaFecal.map(o=>`<div class="optbtn ${d.tecnica===o?'selected':''}" onclick="muestraSetDetalle('materiaFecal','tecnica','${o}')">${o}</div>`).join('')}</div>
+      <div class="fieldnote" style="margin:10px 0 6px;">Análisis</div>
+      <div class="optrow">
+        <div class="optbtn ${(d.analisis||[]).includes('Coproparasitológico')?'selected':''}" onclick="muestraToggleDetalleArr('materiaFecal','analisis','Coproparasitológico')">Coproparasitológico</div>
+        <div class="optbtn ${(d.analisis||[]).includes('Otros')?'selected':''}" onclick="muestraToggleDetalleArr('materiaFecal','analisis','Otros')">Otros</div>
+      </div>
+      ${(d.analisis||[]).includes('Otros') ? `<label>¿Cuál?</label><input type="text" id="muestra_materiaFecal_otro" value="${escapeHtml(d.otroTexto||'')}">` : ''}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="${(d.analisis||[]).includes('Otros') ? `muestraSetDetalle('materiaFecal','otroTexto', document.getElementById('muestra_materiaFecal_otro').value.trim()); ` : ''}muestraConfigTipo=null; render()">Listo</button>
+    `;
+  }
+
+  if(tipoId==='orina'){
+    return `
+      <button class="backbtn" onclick="${volver}">‹ Volver</button>
+      <div class="sectiontitle">${lab}</div>
+      <div class="fieldnote" style="margin-bottom:6px;">Técnica</div>
+      <div class="optrow">${MUESTRA_TECNICAS.orina.map(o=>`<div class="optbtn ${d.tecnica===o?'selected':''}" onclick="muestraSetDetalle('orina','tecnica','${o}')">${o}</div>`).join('')}</div>
+      <div class="fieldnote" style="margin:10px 0 6px;">Análisis (podés elegir varios)</div>
+      <div class="optrow" style="flex-wrap:wrap;">${MUESTRA_ANALISIS_ORINA.map(o=>`<div class="optbtn ${(d.analisis||[]).includes(o)?'selected':''}" onclick="muestraToggleDetalleArr('orina','analisis','${o}')">${o}</div>`).join('')}</div>
+      ${(d.analisis||[]).includes('Otro') ? `<label>¿Cuál?</label><input type="text" id="muestra_orina_otro" value="${escapeHtml(d.otroTexto||'')}">` : ''}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="${(d.analisis||[]).includes('Otro') ? `muestraSetDetalle('orina','otroTexto', document.getElementById('muestra_orina_otro').value.trim()); ` : ''}muestraConfigTipo=null; render()">Listo</button>
+    `;
+  }
+
+  // sangre
+  const tecnica = d.tecnica;
+  let html = `
+    <button class="backbtn" onclick="${volver}">‹ Volver</button>
+    <div class="sectiontitle">${lab}</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Técnica</div>
+    <div class="optrow">${MUESTRA_TECNICAS.sangre.map(o=>`<div class="optbtn ${tecnica===o?'selected':''}" onclick="muestraSetDetalle('sangre','tecnica','${o}')">${o}</div>`).join('')}</div>
+  `;
+  if(tecnica==='Punción'){
+    html += `
+      <div class="fieldnote" style="margin:10px 0 6px;">Análisis</div>
+      <div class="optrow"><div class="optbtn selected" style="cursor:default;">Frotis</div></div>
+    `;
+  } else if(tecnica==='Venopunción'){
+    const analisis = d.analisis||[];
+    html += `
+      <div class="fieldnote" style="margin:10px 0 6px;">Análisis (podés elegir varios)</div>
+      <div class="optrow" style="flex-wrap:wrap;">${MUESTRA_ANALISIS_VENOPUNCION.map(o=>`<div class="optbtn ${analisis.includes(o)?'selected':''}" onclick="muestraToggleDetalleArr('sangre','analisis','${o}')">${o}</div>`).join('')}</div>
+      ${analisis.includes('Otros') ? `<label>¿Cuál?</label><input type="text" id="muestra_sangre_otro" value="${escapeHtml(d.otroTexto||'')}">` : ''}
+      ${analisis.includes('Minerales') ? `
+        <div class="fieldnote" style="margin:10px 0 6px;">Minerales</div>
+        <div class="optrow" style="flex-wrap:wrap;">${MUESTRA_MINERALES.map(o=>`<div class="optbtn ${(d.minerales||[]).includes(o)?'selected':''}" onclick="muestraToggleDetalleArr('sangre','minerales','${o}')">${o}</div>`).join('')}</div>
+      ` : ''}
+      ${analisis.includes('Enfermedades venéreas') ? `
+        <div class="fieldnote" style="margin:10px 0 6px;">Enfermedades venéreas</div>
+        <div class="optrow" style="flex-wrap:wrap;">${MUESTRA_VENEREAS.map(o=>`<div class="optbtn ${(d.venereas||[]).includes(o)?'selected':''}" onclick="muestraToggleDetalleArr('sangre','venereas','${o}')">${o}</div>`).join('')}</div>
+      ` : ''}
+    `;
+  }
+  html += `<button class="btn btn-teal" style="margin-top:16px;" onclick="${tecnica==='Venopunción' && (d.analisis||[]).includes('Otros') ? `muestraSetDetalle('sangre','otroTexto', document.getElementById('muestra_sangre_otro').value.trim()); ` : ''}muestraConfigTipo=null; render()" ${tecnica?'':'disabled'}>Listo</button>`;
+  return html;
+}
+function tm_setModo(m){ muestraObjetoActual().modo = m; render(); }
+function muestraPasoModo(tm){
+  const especie = trabajoActual.especie;
+  if(especie==='Canino' || especie==='Felino' || especie==='Otros'){
+    tm.modo = 'individual';
+    muestraStep = 'datos';
+    return muestraPasoDatos(tm);
+  }
+  return `
+    <button class="backbtn" onclick="muestraStep='config'; muestraConfigTipo=null; render()">‹ Volver</button>
+    <div class="sectiontitle">¿Individual o masivo?</div>
+    <div class="optrow">
+      <div class="optbtn ${tm.modo==='individual'?'selected':''}" onclick="tm_setModo('individual')">Individual</div>
+      <div class="optbtn ${tm.modo==='masivo'?'selected':''}" onclick="tm_setModo('masivo')">Masivo</div>
+    </div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraStep='datos'; render()" ${tm.modo?'':'disabled'}>Siguiente</button>
+  `;
+}
+function muestraPasoDatos(tm){
+  const especie = trabajoActual.especie;
+  if(tm.modo==='masivo'){
+    if(especie==='Bovino') return muestraDatosMasivoBovino(tm);
+    return muestraDatosMasivoEquino(tm);
+  }
+  return muestraDatosIndividual(tm, especie);
+}
+function muestraDatosIndividual(tm, especie){
+  const ind = tm.individual || {};
+  const campoId = especie==='Bovino' ? 'caravana' : 'nombre';
+  const campoLabel = especie==='Bovino' ? 'Caravana' : 'Nombre';
+  const volver = (especie==='Canino'||especie==='Felino'||especie==='Otros') ? "muestraStep='config'; muestraConfigTipo=null; render()" : "muestraStep='modo'; render()";
+  return `
+    <button class="backbtn" onclick="${volver}">‹ Volver</button>
+    <div class="sectiontitle">Datos del paciente</div>
+    <label>${campoLabel}</label>
+    <input type="text" id="muestra_ind_id" value="${escapeHtml(ind[campoId]||'')}">
+    <label>Raza</label>
+    <input type="text" id="muestra_ind_raza" value="${escapeHtml(ind.raza||'')}">
+    <label>Pelaje</label>
+    <input type="text" id="muestra_ind_pelaje" value="${escapeHtml(ind.pelaje||'')}">
+    <label>Sexo</label>
+    <input type="text" id="muestra_ind_sexo" value="${escapeHtml(ind.sexo||'')}">
+    <label>Edad</label>
+    <input type="text" id="muestra_ind_edad" value="${escapeHtml(ind.edad||'')}">
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraGuardarIndividual('${campoId}')">Siguiente</button>
+  `;
+}
+function muestraGuardarIndividual(campoId){
+  const tm = muestraObjetoActual();
+  const obj = {raza: document.getElementById('muestra_ind_raza').value.trim(), pelaje: document.getElementById('muestra_ind_pelaje').value.trim(), sexo: document.getElementById('muestra_ind_sexo').value.trim(), edad: document.getElementById('muestra_ind_edad').value.trim()};
+  obj[campoId] = document.getElementById('muestra_ind_id').value.trim();
+  tm.individual = obj;
+  muestraStep = 'observaciones';
+  render();
+}
+function muestraDatosMasivoEquino(tm){
+  const animales = tm.masivo.animales;
+  return `
+    <button class="backbtn" onclick="muestraStep='modo'; render()">‹ Volver</button>
+    <div class="sectiontitle">Animales (masivo)</div>
+    <label>Nombre</label><input type="text" id="muestra_masivo_nombre" placeholder="Nombre del animal">
+    <label>Raza</label><input type="text" id="muestra_masivo_raza">
+    <label>Pelaje</label><input type="text" id="muestra_masivo_pelaje">
+    <label>Sexo</label><input type="text" id="muestra_masivo_sexo">
+    <label>Edad</label><input type="text" id="muestra_masivo_edad">
+    <button class="btn btn-green" style="margin-top:10px;" onclick="muestraAgregarAnimalMasivoEquino()">+ Agregar y siguiente animal</button>
+    <div class="sublist" style="margin-top:12px;">
+      ${animales.map((a,i)=>`<div class="subtile"><span>🐎 ${escapeHtml(a.nombre)} — ${escapeHtml(a.raza)}</span><button class="removeanimal" onclick="muestraQuitarAnimalMasivo(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste animales.</div>'}
+    </div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraStep='observaciones'; render()" ${animales.length?'':'disabled'}>Siguiente</button>
+  `;
+}
+function muestraAgregarAnimalMasivoEquino(){
+  const tm = muestraObjetoActual();
+  const nombre = document.getElementById('muestra_masivo_nombre').value.trim();
+  if(!nombre) return;
+  tm.masivo.animales.push({
+    nombre,
+    raza: document.getElementById('muestra_masivo_raza').value.trim(),
+    pelaje: document.getElementById('muestra_masivo_pelaje').value.trim(),
+    sexo: document.getElementById('muestra_masivo_sexo').value.trim(),
+    edad: document.getElementById('muestra_masivo_edad').value.trim(),
+  });
+  render();
+  setTimeout(()=>{
+    const el=document.getElementById('muestra_masivo_nombre'); if(el){ el.value=''; el.focus(); }
+    ['muestra_masivo_raza','muestra_masivo_pelaje','muestra_masivo_sexo','muestra_masivo_edad'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  }, 0);
+}
+function muestraQuitarAnimalMasivo(i){ muestraObjetoActual().masivo.animales.splice(i,1); render(); }
+function muestraDatosMasivoBovino(tm){
+  const animales = tm.masivo.animales;
+  return `
+    <button class="backbtn" onclick="muestraStep='modo'; render()">‹ Volver</button>
+    <div class="sectiontitle">Caravanas (masivo)</div>
+    <label>Caravana</label>
+    <input type="text" id="muestra_masivo_caravana" placeholder="Número de caravana" inputmode="numeric" onkeydown="if(event.key==='Enter'){event.preventDefault(); muestraAgregarCaravanaMasivoBovino();}">
+    <button class="btn btn-green" style="margin-top:10px;" onclick="muestraAgregarCaravanaMasivoBovino()">+ Agregar</button>
+    <div class="sublist" style="margin-top:12px;">
+      ${animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)}</span><button class="removeanimal" onclick="muestraQuitarAnimalMasivo(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste caravanas.</div>'}
+    </div>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraStep='observaciones'; render()" ${animales.length?'':'disabled'}>Siguiente</button>
+  `;
+}
+function muestraAgregarCaravanaMasivoBovino(){
+  const tm = muestraObjetoActual();
+  const input = document.getElementById('muestra_masivo_caravana');
+  const val = input ? input.value.trim() : '';
+  if(!val) return;
+  tm.masivo.animales.push({caravana: val});
+  render();
+  setTimeout(()=>{ const el=document.getElementById('muestra_masivo_caravana'); if(el){ el.value=''; el.focus(); } }, 0);
+}
+function muestraPasoObservaciones(tm){
+  return `
+    <button class="backbtn" onclick="muestraStep='datos'; render()">‹ Volver</button>
+    <div class="sectiontitle">Observaciones</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Opcional — algo que se te haya quedado colgado.</div>
+    <textarea id="muestra_observaciones" placeholder="Observaciones...">${escapeHtml(tm.observaciones||'')}</textarea>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraFinalizar()">Guardar</button>
+  `;
+}
+function muestraFinalizar(){
+  const tm = muestraObjetoActual();
+  tm.observaciones = document.getElementById('muestra_observaciones').value.trim();
+  muestraStep = null; muestraContexto = null; muestraConfigTipo = null;
+  render();
+}
+function resumenTomaMuestra(tm){
+  if(!tm || !tm.tipos || !tm.tipos.length) return '';
+  let out = `  Toma de muestra:\n`;
+  tm.tipos.forEach(tipoId=>{
+    const lab = MUESTRA_TIPOS.find(t=>t.id===tipoId).lab;
+    const d = tm.detalle[tipoId] || {};
+    if(tipoId==='otro'){
+      if(d.texto) out += `    Otro: ${d.texto}\n`;
+      return;
+    }
+    let linea = `    ${lab}`;
+    if(d.tecnica) linea += ` (${d.tecnica})`;
+    out += linea+'\n';
+    if(tipoId==='sangre'){
+      if(d.tecnica==='Punción') out += `      Análisis: Frotis\n`;
+      else if(d.analisis && d.analisis.length){
+        out += `      Análisis: ${d.analisis.map(a=> a==='Otros'&&d.otroTexto ? `Otros: ${d.otroTexto}` : a).join(', ')}\n`;
+        if(d.minerales && d.minerales.length) out += `      Minerales: ${d.minerales.join(', ')}\n`;
+        if(d.venereas && d.venereas.length) out += `      Enfermedades venéreas: ${d.venereas.join(', ')}\n`;
+      }
+    } else if(tipoId==='orina' || tipoId==='materiaFecal' || tipoId==='medulaOsea'){
+      if(d.analisis && d.analisis.length){
+        out += `      Análisis: ${d.analisis.map(a=> (a==='Otro'||a==='Otros')&&d.otroTexto ? `${a}: ${d.otroTexto}` : a).join(', ')}\n`;
+      }
+    } else if(d.texto){
+      out += `      ${d.texto}\n`;
+    }
+  });
+  if(tm.modo==='individual' && tm.individual && hasData(tm.individual)){
+    const ind = tm.individual;
+    const idCampo = ind.caravana!==undefined ? `Caravana ${ind.caravana||'—'}` : `Nombre ${ind.nombre||'—'}`;
+    out += `    Paciente: ${idCampo} · ${ind.raza||''} · ${ind.pelaje||''} · ${ind.sexo||''} · ${ind.edad||''}\n`;
+  } else if(tm.modo==='masivo' && tm.masivo && tm.masivo.animales && tm.masivo.animales.length){
+    out += `    Animales (${tm.masivo.animales.length}):\n`;
+    tm.masivo.animales.forEach(a=>{
+      if(a.caravana!==undefined) out += `      ${a.caravana}\n`;
+      else out += `      ${a.nombre} · ${a.raza||''} · ${a.pelaje||''} · ${a.sexo||''} · ${a.edad||''}\n`;
+    });
+  }
+  if(tm.observaciones) out += `    Observaciones: ${tm.observaciones}\n`;
+  return out;
+}
+
 // --- Exámenes complementarios ---
 let complementarioActivo = null;
 function catComplementarios(){
   const ex = trabajoActual.examenesComplementarios || {sangradoMasivo:{tubos:[],observaciones:''}};
+  if(muestraStep) return catTomaMuestra();
   if(complementarioActivo==='sangradoMasivo'){
     const sm = ex.sangradoMasivo || {tubos:[], observaciones:''};
     window._tubosTmp = sm.tubos && sm.tubos.length ? JSON.parse(JSON.stringify(sm.tubos)) : [{nombre:'',edad:'',pelaje:'',sexo:''}];
@@ -1113,8 +1533,7 @@ function catComplementarios(){
     <div class="sublist">
       <div class="subtile" onclick="complementarioActivo='radiografia'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.radiografia} Radiografía</span>${hasData(ex.radiografia)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="complementarioActivo='ecografia'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.ecografia} Ecografía</span>${hasData(ex.ecografia)?'<span class="check">✓</span>':''}</div>
-      <div class="subtile" onclick="complementarioActivo='sangrado'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.sangrado} Análisis de sangre</span>${hasData(ex.sangrado)?'<span class="check">✓</span>':''}</div>
-      <div class="subtile" onclick="complementarioActivo='sangradoMasivo'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.sangradoMasivo} Análisis de sangre grupal</span>${(ex.sangradoMasivo&&ex.sangradoMasivo.tubos&&ex.sangradoMasivo.tubos.length)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="iniciarTomaMuestra('equino','tomaMuestra')"><span>🧪 Toma de muestra</span>${(ex.tomaMuestra&&ex.tomaMuestra.tipos&&ex.tomaMuestra.tipos.length)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="complementarioActivo='otros'; navigate('equino-complementarios')"><span>${COMPLEMENTARIO_ICONOS.otros} Otros</span>${hasData(ex.otros)?'<span class="check">✓</span>':''}</div>
     </div>
     ${botonGuardarSimple('guardarComplementariosFinal')}
@@ -1153,6 +1572,99 @@ function guardarSangradoMasivo(){
 }
 function guardarComplementariosFinal(estado){ finalizarGuardado(estado); }
 
+// --- Seguimiento de cirugía ---
+let seguimientoCirugiaActivo = false;
+let seguimientoFiltroFecha = '';
+function listarCirugiasCliente(clienteId){
+  const out = [];
+  trabajos.forEach(t=>{
+    if(t.clienteId!==clienteId) return;
+    const pq = t.procedimientosQuirurgicos;
+    if(!pq || !hasData(pq)) return;
+    const animalIdGenerico = (t.datosPaciente&&t.datosPaciente.nombre) || (t.informacionGeneral&&t.informacionGeneral.paciente&&t.informacionGeneral.paciente.nombre) || '';
+    Object.entries(pq).forEach(([k,v])=>{
+      if(k==='patologiasPodales' && v && v.animales){
+        v.animales.forEach((a,ai)=>{
+          if(!a.hallazgos || !a.hallazgos.length) return;
+          out.push({
+            trabajoId:t.id, fecha:t.fechaInicio, especie:t.especie,
+            sistema:'Locomotor (patologías podales)', animalId:a.caravana,
+            alta: a.seguimiento ? a.seguimiento.alta : null, nota: a.seguimiento ? a.seguimiento.nota : '',
+            tipo:'podal', animalIndex: ai
+          });
+        });
+        return;
+      }
+      if(CLAVES_NO_SISTEMA_QX.includes(k)) return;
+      if(!v || !v.texto) return;
+      out.push({
+        trabajoId:t.id, fecha:t.fechaInicio, especie:t.especie,
+        sistema:k, animalId: v.caravana || animalIdGenerico,
+        alta: v.seguimiento ? v.seguimiento.alta : null, nota: v.seguimiento ? v.seguimiento.nota : '',
+        tipo:'sistema', sistemaKey:k
+      });
+    });
+  });
+  out.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  return out;
+}
+function getSeguimientoObj(t, tipo, key){
+  if(tipo==='podal'){
+    const a = t.procedimientosQuirurgicos.patologiasPodales.animales[key];
+    if(!a.seguimiento) a.seguimiento = {alta:null, nota:''};
+    return a.seguimiento;
+  }
+  const v = t.procedimientosQuirurgicos[key];
+  if(!v.seguimiento) v.seguimiento = {alta:null, nota:''};
+  return v.seguimiento;
+}
+function marcarSeguimientoCirugia(trabajoId, tipo, key, alta){
+  const t = trabajos.find(x=>x.id===trabajoId);
+  if(!t) return;
+  const seg = getSeguimientoObj(t, tipo, key);
+  seg.alta = alta;
+  saveTrabajoDoc(t);
+  render();
+}
+function actualizarNotaSeguimiento(trabajoId, tipo, key, valor){
+  const t = trabajos.find(x=>x.id===trabajoId);
+  if(!t) return;
+  const seg = getSeguimientoObj(t, tipo, key);
+  seg.nota = valor;
+  saveTrabajoDoc(t);
+}
+function catSeguimientoCirugia(volverJS){
+  const clienteId = trabajoActual.clienteId;
+  if(!clienteId){
+    return `
+      <button class="backbtn" onclick="${volverJS}">‹ Procedimientos quirúrgicos</button>
+      <div class="sectiontitle">Seguimiento de cirugía</div>
+      <div class="fieldnote">Este trabajo no tiene un cliente asociado, así que no hay historial de cirugías previas para mostrar.</div>
+    `;
+  }
+  let cirugias = listarCirugiasCliente(clienteId);
+  if(seguimientoFiltroFecha) cirugias = cirugias.filter(c=>c.fecha && c.fecha>=seguimientoFiltroFecha);
+  return `
+    <button class="backbtn" onclick="${volverJS}">‹ Procedimientos quirúrgicos</button>
+    <div class="sectiontitle">Seguimiento de cirugía</div>
+    <label>Filtrar desde fecha (opcional)</label>
+    <input type="date" value="${seguimientoFiltroFecha}" onchange="seguimientoFiltroFecha=this.value; render()">
+    ${cirugias.length ? cirugias.map(c=>{
+      const keyLit = c.tipo==='podal' ? c.animalIndex : `'${c.sistemaKey}'`;
+      return `
+      <div class="listcard" style="cursor:default;">
+        <div class="top"><div class="name">${escapeHtml(c.sistema)}</div><div class="date">${fmtFecha(c.fecha)}</div></div>
+        <div class="meta">${c.animalId?escapeHtml(c.animalId):'Sin identificar'} · ${c.especie}</div>
+        <div class="optrow" style="margin-top:8px;">
+          <div class="optbtn ${c.alta===true?'selected':''}" onclick="marcarSeguimientoCirugia('${c.trabajoId}','${c.tipo}',${keyLit},true)">Alta</div>
+          <div class="optbtn ${c.alta===false?'selected':''}" onclick="marcarSeguimientoCirugia('${c.trabajoId}','${c.tipo}',${keyLit},false)">Baja</div>
+        </div>
+        <input type="text" placeholder="Otro / motivo (opcional)" value="${escapeHtml(c.nota||'')}" style="margin-top:8px;" onchange="actualizarNotaSeguimiento('${c.trabajoId}','${c.tipo}',${keyLit}, this.value)">
+      </div>`;
+    }).join('') : '<div class="fieldnote">Este cliente no tiene cirugías previas registradas.</div>'}
+  `;
+}
+
 // --- Procedimientos quirúrgicos ---
 let sistemaQuirurgicoActivo = null;
 let protocoloAnestesicoActivo = false;
@@ -1180,6 +1692,9 @@ function catProtocoloAnestesico(volverJS, backLabel){
 }
 function catQuirurgicos(){
   const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(seguimientoCirugiaActivo){
+    return catSeguimientoCirugia("seguimientoCirugiaActivo=false; navigate('equino-quirurgicos')");
+  }
   if(protocoloAnestesicoActivo){
     return catProtocoloAnestesico("protocoloAnestesicoActivo=false; navigate('equino-quirurgicos')", "Procedimientos quirúrgicos");
   }
@@ -1196,6 +1711,12 @@ function catQuirurgicos(){
   }
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Seguimiento</div>
+    <div class="sublist">
+      <div class="subtile" onclick="seguimientoCirugiaActivo=true; navigate('equino-quirurgicos')">
+        <span>📋 Seguimiento de cirugía</span>
+      </div>
+    </div>
     <div class="sectiontitle">Protocolo anestésico</div>
     <div class="sublist">
       <div class="subtile" onclick="protocoloAnestesicoActivo=true; navigate('equino-quirurgicos')">
@@ -1311,6 +1832,120 @@ function guardarSanidadMasiva(){
 }
 function guardarSanidadFinal(estado){ finalizarGuardado(estado); }
 
+// --- Necropsia ---
+let necropsiaSistemaActivo = null;
+let necropsiaSubPantalla = null; // 'inSitu' | 'observaciones' | null (menu)
+function catNecropsia(volverJS, saveFnName){
+  if(!trabajoActual.necropsia) trabajoActual.necropsia = {exploracionInSitu:{texto:'',fotos:[]}, sistemas:{}, observaciones:{texto:'',fotos:[]}};
+  const n = trabajoActual.necropsia;
+  if(necropsiaSubPantalla==='inSitu'){
+    return `
+      <button class="backbtn" onclick="necropsiaSubPantalla=null; render()">‹ Necropsia</button>
+      <div class="sectiontitle">Exploración in situ</div>
+      <textarea id="necro_insitu_texto" placeholder="Descripción del hallazgo del cuerpo, posición, entorno...">${escapeHtml(n.exploracionInSitu.texto||'')}</textarea>
+      ${fotosBlock(n.exploracionInSitu.fotos, ['necropsia','exploracionInSitu'])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarNecropsiaInSitu()">Listo, volver</button>
+    `;
+  }
+  if(necropsiaSubPantalla==='observaciones'){
+    return `
+      <button class="backbtn" onclick="necropsiaSubPantalla=null; render()">‹ Necropsia</button>
+      <div class="sectiontitle">Observaciones</div>
+      <textarea id="necro_obs_texto" placeholder="Observaciones generales de la necropsia...">${escapeHtml(n.observaciones.texto||'')}</textarea>
+      ${fotosBlock(n.observaciones.fotos, ['necropsia','observaciones'])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarNecropsiaObservaciones()">Listo, volver</button>
+    `;
+  }
+  if(necropsiaSistemaActivo){
+    const dato = n.sistemas[necropsiaSistemaActivo] || {texto:'', fotos:[]};
+    return `
+      <button class="backbtn" onclick="necropsiaSistemaActivo=null; render()">‹ Necropsia</button>
+      <div class="sectiontitle">${necropsiaSistemaActivo}</div>
+      <label>Hallazgos / si tomó muestra</label>
+      <textarea id="necro_sis_texto" placeholder="Qué encontraste en este sistema...">${escapeHtml(dato.texto||'')}</textarea>
+      ${fotosBlock(dato.fotos, ['necropsia','sistemas',necropsiaSistemaActivo])}
+      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarNecropsiaSistema()">Listo, volver</button>
+    `;
+  }
+  return `
+    <button class="backbtn" onclick="${volverJS}">‹ Categorías</button>
+    <div class="sectiontitle">Necropsia</div>
+    <div class="sublist">
+      <div class="subtile" onclick="necropsiaSubPantalla='inSitu'; render()"><span>🔎 Exploración in situ</span>${hasData(n.exploracionInSitu)?'<span class="check">✓</span>':''}</div>
+    </div>
+    <div class="sectiontitle">Examen por sistema</div>
+    <div class="sublist">
+      ${SISTEMAS.map(s=>`<div class="subtile" onclick="necropsiaSistemaActivo='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${hasData(n.sistemas[s])?'<span class="check">✓</span>':''}</div>`).join('')}
+    </div>
+    <div class="sectiontitle">Cierre</div>
+    <div class="sublist">
+      <div class="subtile" onclick="necropsiaSubPantalla='observaciones'; render()"><span>📝 Observaciones</span>${hasData(n.observaciones)?'<span class="check">✓</span>':''}</div>
+    </div>
+    ${botonGuardarSimple(saveFnName)}
+  `;
+}
+function guardarNecropsiaInSitu(){
+  trabajoActual.necropsia.exploracionInSitu.texto = document.getElementById('necro_insitu_texto').value.trim();
+  necropsiaSubPantalla=null; render();
+}
+function guardarNecropsiaObservaciones(){
+  trabajoActual.necropsia.observaciones.texto = document.getElementById('necro_obs_texto').value.trim();
+  necropsiaSubPantalla=null; render();
+}
+function guardarNecropsiaSistema(){
+  const actual = trabajoActual.necropsia.sistemas[necropsiaSistemaActivo] || {texto:'',fotos:[]};
+  actual.texto = document.getElementById('necro_sis_texto').value.trim();
+  trabajoActual.necropsia.sistemas[necropsiaSistemaActivo] = actual;
+  necropsiaSistemaActivo = null;
+  render();
+}
+function guardarNecropsiaFinal(estado){ finalizarGuardado(estado); }
+function guardarNecropsiaFinalMascota(estado){ mascotaProcActivo=null; finalizarGuardadoMascota(estado, 'mascota-procedimientos'); }
+function resumenNecropsia(n){
+  if(!n || !hasData(n)) return '';
+  let out = `\nNecropsia:\n`;
+  if(hasData(n.exploracionInSitu)) out += `  Exploración in situ: ${campoResumen(n.exploracionInSitu)}\n`;
+  Object.entries(n.sistemas||{}).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema: ${k}\n    ${campoResumen(v)}\n`; });
+  if(hasData(n.observaciones)) out += `  Observaciones: ${campoResumen(n.observaciones)}\n`;
+  return out;
+}
+
+// --- Nutrición ---
+function catNutricion(volverJS, saveFnName){
+  const dato = trabajoActual.nutricion || {texto:'', fotos:[]};
+  return `
+    <button class="backbtn" onclick="${volverJS}">‹ Categorías</button>
+    <div class="sectiontitle">Nutrición</div>
+    <label>Dieta</label>
+    <textarea id="nutri_texto" placeholder="Descripción de la dieta, recomendaciones, ajustes...">${escapeHtml(dato.texto||'')}</textarea>
+    ${fotosBlock(dato.fotos, ['nutricion'])}
+    ${botonGuardarSimple(saveFnName)}
+  `;
+}
+function guardarNutricion(estado){
+  const actual = trabajoActual.nutricion || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('nutri_texto').value.trim();
+  trabajoActual.nutricion = actual;
+  finalizarGuardado(estado);
+}
+function guardarNutricionMascotaTop(estado){
+  const actual = trabajoActual.nutricion || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('nutri_texto').value.trim();
+  trabajoActual.nutricion = actual;
+  finalizarGuardadoMascota(estado, 'mascotaCategorias');
+}
+function guardarNutricionMascota(estado){
+  const actual = trabajoActual.nutricion || {texto:'', fotos:[]};
+  actual.texto = document.getElementById('nutri_texto').value.trim();
+  trabajoActual.nutricion = actual;
+  mascotaProcActivo=null;
+  finalizarGuardadoMascota(estado, 'mascota-procedimientos');
+}
+function resumenNutricion(n){
+  if(!hasData(n)) return '';
+  return `\nNutrición:\n  Dieta: ${campoResumen(n)}\n`;
+}
+
 // --- Otro procedimiento ---
 function catOtro(){
   const dato = trabajoActual.otroProcedimiento || {texto:'', fotos:[]};
@@ -1363,6 +1998,8 @@ function viewBovinoCategorias(){
     {id:'quirurgicos', emoji:'🔪', lab:'Procedimientos quirúrgicos', has: hasData(t.procedimientosQuirurgicos)},
     {id:'tratamiento', emoji:'💉', lab:'Tratamiento', has: hasData(t.tratamiento)},
     {id:'sanidad', emoji:'💉', lab:'Sanidad', has: hasData(t.sanidad)},
+    {id:'necropsia', emoji:'⚰️', lab:'Necropsia', has: hasData(t.necropsia)},
+    {id:'nutricion', emoji:'🌾', lab:'Nutrición', has: hasData(t.nutricion)},
     {id:'otro', emoji:'➕', lab:'Otro procedimiento', has: hasData(t.otroProcedimiento)},
     {id:'observaciones', emoji:'📝', lab:'Observaciones', has: hasData(t.observacionesFinales)},
   ];
@@ -1392,6 +2029,8 @@ function viewBovinoCategoria(cat){
   if(cat==='quirurgicos') return catQuirurgicosBovino();
   if(cat==='tratamiento') return catTratamientoBovino();
   if(cat==='sanidad') return catSanidadBovino();
+  if(cat==='necropsia') return catNecropsia("volverACategorias()", 'guardarNecropsiaFinal');
+  if(cat==='nutricion') return catNutricion("volverACategorias()", 'guardarNutricion');
   if(cat==='otro') return catOtro();
   if(cat==='observaciones') return catObservaciones();
   return '';
@@ -1658,6 +2297,7 @@ function guardarAndrologico(estado){
 // --- Exámenes complementarios (Bovino) ---
 function catComplementariosBovino(){
   const ex = trabajoActual.examenesComplementarios || {datosAnimal:{caravana:''}, sangradoMasivo:{tubos:[],observaciones:''}};
+  if(muestraStep) return catTomaMuestra();
   if(complementarioActivoBovino==='datosAnimal'){
     return `
       <button class="backbtn" onclick="complementarioActivoBovino=null; render()">‹ Exámenes complementarios</button>
@@ -1698,8 +2338,7 @@ function catComplementariosBovino(){
       <div class="subtile" onclick="complementarioActivoBovino='datosAnimal'; render()"><span>${COMPLEMENTARIO_ICONOS.datosAnimal} Datos del animal</span>${(ex.datosAnimal&&ex.datosAnimal.caravana)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="complementarioActivoBovino='ecografia'; render()"><span>${COMPLEMENTARIO_ICONOS.ecografia} Ecografía</span>${hasData(ex.ecografia)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="complementarioActivoBovino='radiografia'; render()"><span>${COMPLEMENTARIO_ICONOS.radiografia} Radiografía</span>${hasData(ex.radiografia)?'<span class="check">✓</span>':''}</div>
-      <div class="subtile" onclick="complementarioActivoBovino='sangrado'; render()"><span>${COMPLEMENTARIO_ICONOS.sangrado} Análisis de sangre</span>${hasData(ex.sangrado)?'<span class="check">✓</span>':''}</div>
-      <div class="subtile" onclick="complementarioActivoBovino='sangradoMasivo'; render()"><span>${COMPLEMENTARIO_ICONOS.sangradoMasivo} Análisis de sangre grupal</span>${(ex.sangradoMasivo&&ex.sangradoMasivo.tubos&&ex.sangradoMasivo.tubos.length)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="iniciarTomaMuestra('bovino','tomaMuestra')"><span>🧪 Toma de muestra</span>${(ex.tomaMuestra&&ex.tomaMuestra.tipos&&ex.tomaMuestra.tipos.length)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="complementarioActivoBovino='otro'; render()"><span>${COMPLEMENTARIO_ICONOS.otro} Otro procedimiento</span>${hasData(ex.otro)?'<span class="check">✓</span>':''}</div>
     </div>
     ${botonGuardarSimple('guardarComplementariosBovinoFinal')}
@@ -1893,6 +2532,9 @@ function resumenPatologiasPodales(pq){
 // --- Procedimientos quirúrgicos (Bovino) ---
 function catQuirurgicosBovino(){
   const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(seguimientoCirugiaActivo){
+    return catSeguimientoCirugia("seguimientoCirugiaActivo=false; render()");
+  }
   if(protocoloAnestesicoActivo){
     return catProtocoloAnestesico("protocoloAnestesicoActivo=false; render()", "Procedimientos quirúrgicos");
   }
@@ -1928,6 +2570,12 @@ function catQuirurgicosBovino(){
   }
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
+    <div class="sectiontitle">Seguimiento</div>
+    <div class="sublist">
+      <div class="subtile" onclick="seguimientoCirugiaActivo=true; render()">
+        <span>📋 Seguimiento de cirugía</span>
+      </div>
+    </div>
     <div class="sectiontitle">Protocolo anestésico</div>
     <div class="sublist">
       <div class="subtile" onclick="protocoloAnestesicoActivo=true; render()">
@@ -2328,6 +2976,10 @@ function viewMascotaCategorias(){
       <div class="cattile" onclick="mascotaProcActivo=null; navigate('mascota-procedimientos')">
         <div class="left"><span class="emoji">🩺</span><span class="lab">Procedimientos</span></div>
       </div>
+      <div class="cattile" onclick="navigate('mascota-nutricion')">
+        <div class="left"><span class="emoji">🌾</span><span class="lab">Nutrición</span></div>
+        ${hasData(t.nutricion)?'<span class="check">✓</span>':''}
+      </div>
     </div>
     <div class="fieldnote" style="margin-top:16px;">Cuando termines con este trabajo, elegí una opción:</div>
     ${botonesGuardar('guardarDesdeCategoriasMascota','salirSinGuardarDesdeCategorias')}
@@ -2378,6 +3030,7 @@ function catMascotaProcedimientos(){
   if(mascotaProcActivo==='quirurgicos') return catQuirurgicosMascota();
   if(mascotaProcActivo==='sanidad') return catSanidadMascota();
   if(mascotaProcActivo==='tratamientos') return catTratamientosMascota();
+  if(mascotaProcActivo==='necropsia') return catNecropsia("mascotaProcActivo=null; render()", 'guardarNecropsiaFinalMascota');
   if(mascotaProcActivo==='otro') return catOtroMascota();
   if(mascotaProcActivo==='observaciones') return catObservacionesMascota();
   const t = trabajoActual;
@@ -2390,6 +3043,7 @@ function catMascotaProcedimientos(){
       <div class="cattile" onclick="mascotaSistemaQuirurgicoActivo=null; mascotaProcActivo='quirurgicos'; render()"><div class="left"><span class="emoji">🔪</span><span class="lab">Procedimientos quirúrgicos</span></div>${hasData(t.procedimientosQuirurgicos)?'<span class="check">✓</span>':''}</div>
       <div class="cattile" onclick="mascotaSanidadSub=null; mascotaProcActivo='sanidad'; render()"><div class="left"><span class="emoji">💉</span><span class="lab">Sanidad</span></div>${hasData(t.sanidad)?'<span class="check">✓</span>':''}</div>
       <div class="cattile" onclick="mascotaProcActivo='tratamientos'; render()"><div class="left"><span class="emoji">💊</span><span class="lab">Tratamientos</span></div>${hasData(t.tratamientos)?'<span class="check">✓</span>':''}</div>
+      <div class="cattile" onclick="necropsiaSistemaActivo=null; necropsiaSubPantalla=null; mascotaProcActivo='necropsia'; render()"><div class="left"><span class="emoji">⚰️</span><span class="lab">Necropsia</span></div>${hasData(t.necropsia)?'<span class="check">✓</span>':''}</div>
       <div class="cattile" onclick="mascotaProcActivo='otro'; render()"><div class="left"><span class="emoji">➕</span><span class="lab">Otros procedimientos</span></div>${hasData(t.otroProcedimiento)?'<span class="check">✓</span>':''}</div>
       <div class="cattile" onclick="mascotaProcActivo='observaciones'; render()"><div class="left"><span class="emoji">📝</span><span class="lab">Observaciones</span></div>${hasData(t.observacionesFinales)?'<span class="check">✓</span>':''}</div>
     </div>
@@ -2443,6 +3097,7 @@ function guardarClinicaMascotaFinal(estado){ mascotaProcActivo=null; finalizarGu
 // --- Exámenes complementarios ---
 function catComplementariosMascota(){
   const ex = trabajoActual.examenesComplementarios || {};
+  if(muestraStep) return catTomaMuestra();
   if(mascotaComplementarioActivo){
     const labels = {radiografia:'Radiografía', ecografia:'Ecografía', sangrado:'Análisis de sangre', otros:'Otros'};
     const dato = ex[mascotaComplementarioActivo] || {texto:'',fotos:[]};
@@ -2460,7 +3115,7 @@ function catComplementariosMascota(){
     <div class="sublist">
       <div class="subtile" onclick="mascotaComplementarioActivo='radiografia'; render()"><span>${COMPLEMENTARIO_ICONOS.radiografia} Radiografía</span>${hasData(ex.radiografia)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="mascotaComplementarioActivo='ecografia'; render()"><span>${COMPLEMENTARIO_ICONOS.ecografia} Ecografía</span>${hasData(ex.ecografia)?'<span class="check">✓</span>':''}</div>
-      <div class="subtile" onclick="mascotaComplementarioActivo='sangrado'; render()"><span>${COMPLEMENTARIO_ICONOS.sangrado} Análisis de sangre</span>${hasData(ex.sangrado)?'<span class="check">✓</span>':''}</div>
+      <div class="subtile" onclick="iniciarTomaMuestra('mascota','tomaMuestra')"><span>🧪 Toma de muestra</span>${(ex.tomaMuestra&&ex.tomaMuestra.tipos&&ex.tomaMuestra.tipos.length)?'<span class="check">✓</span>':''}</div>
       <div class="subtile" onclick="mascotaComplementarioActivo='otros'; render()"><span>${COMPLEMENTARIO_ICONOS.otros} Otros</span>${hasData(ex.otros)?'<span class="check">✓</span>':''}</div>
     </div>
     ${botonGuardarSimple('guardarComplementariosMascotaFinal', 'cancelarMascotaProc')}
@@ -2479,6 +3134,9 @@ function guardarComplementariosMascotaFinal(estado){ mascotaProcActivo=null; fin
 // --- Procedimientos quirúrgicos ---
 function catQuirurgicosMascota(){
   const q = trabajoActual.procedimientosQuirurgicos || {};
+  if(seguimientoCirugiaActivo){
+    return catSeguimientoCirugia("seguimientoCirugiaActivo=false; render()");
+  }
   if(protocoloAnestesicoActivo){
     return catProtocoloAnestesico("protocoloAnestesicoActivo=false; render()", "Procedimientos quirúrgicos");
   }
@@ -2495,6 +3153,12 @@ function catQuirurgicosMascota(){
   }
   return `
     <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
+    <div class="sectiontitle">Seguimiento</div>
+    <div class="sublist">
+      <div class="subtile" onclick="seguimientoCirugiaActivo=true; render()">
+        <span>📋 Seguimiento de cirugía</span>
+      </div>
+    </div>
     <div class="sectiontitle">Protocolo anestésico</div>
     <div class="sublist">
       <div class="subtile" onclick="protocoloAnestesicoActivo=true; render()">
@@ -2677,7 +3341,8 @@ function resumenTrabajoMascota(t){
   if(t.examenesComplementarios && hasData(t.examenesComplementarios)){
     out += `\nExámenes complementarios:\n`;
     const etiquetasCompM = {radiografia:'radiografía', ecografia:'ecografía', sangrado:'análisis de sangre', otros:'otros'};
-    Object.entries(t.examenesComplementarios).forEach(([k,v])=>{ if(hasData(v)) out += `  ${etiquetasCompM[k]||k}: ${campoResumen(v)}\n`; });
+    Object.entries(t.examenesComplementarios).filter(([k])=>k!=='tomaMuestra').forEach(([k,v])=>{ if(hasData(v)) out += `  ${etiquetasCompM[k]||k}: ${campoResumen(v)}\n`; });
+    out += resumenTomaMuestra(t.examenesComplementarios.tomaMuestra);
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
@@ -2694,6 +3359,8 @@ function resumenTrabajoMascota(t){
     if(hasData(t.sanidad.otros)) out += `  Otros: ${campoResumen(t.sanidad.otros)}\n`;
   }
   if(hasData(t.tratamientos)) out += `\nTratamientos: ${campoResumen(t.tratamientos)}\n`;
+  out += resumenNecropsia(t.necropsia);
+  out += resumenNutricion(t.nutricion);
   if(hasData(t.otroProcedimiento)) out += `\nOtros procedimientos: ${campoResumen(t.otroProcedimiento)}\n`;
   if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
   return out;
@@ -2715,20 +3382,234 @@ function verOEditarTrabajo(id){
   else { editingId = id; navigate('trabajoDetalle'); }
 }
 let historialModo = null; // 'rapida' | 'avanzada'
+let statsSubModo = null; // 'estadisticas' | 'busqueda'
+let statsClienteId = null;
+let statsClienteBusqueda = '';
+let statsDesde = '';
+let statsHasta = '';
+let statsCategoria = null;
+let statsPaso = 'cliente';
 function viewHistorial(){
-  if(historialModo==='rapida') return viewHistorialRapida();
-  if(historialModo==='avanzada') return viewHistorialAvanzada();
-  return `
-    <div class="sectiontitle">Historial</div>
-    <div class="fieldnote" style="margin-bottom:12px;">Buscá cualquier dato que hayas cargado: caravanas, clientes, establecimientos, resultados de exámenes, lo que sea.</div>
-    <div class="catlist">
-      <div class="cattile" onclick="historialModo='rapida'; render()">
-        <div class="left"><span class="emoji">🔍</span><span class="lab">Búsqueda rápida</span></div>
+  if(statsSubModo==='busqueda'){
+    if(historialModo==='rapida') return viewHistorialRapida();
+    if(historialModo==='avanzada') return viewHistorialAvanzada();
+    return `
+      <button class="backbtn" onclick="statsSubModo=null; render()">‹ Estadísticas</button>
+      <div class="sectiontitle">Búsqueda de trabajos</div>
+      <div class="fieldnote" style="margin-bottom:12px;">Buscá cualquier dato que hayas cargado: caravanas, clientes, establecimientos, resultados de exámenes, lo que sea.</div>
+      <div class="catlist">
+        <div class="cattile" onclick="historialModo='rapida'; render()">
+          <div class="left"><span class="emoji">🔍</span><span class="lab">Búsqueda rápida</span></div>
+        </div>
+        <div class="cattile" onclick="historialModo='avanzada'; render()">
+          <div class="left"><span class="emoji">🧭</span><span class="lab">Búsqueda avanzada</span></div>
+        </div>
       </div>
-      <div class="cattile" onclick="historialModo='avanzada'; render()">
-        <div class="left"><span class="emoji">🧭</span><span class="lab">Búsqueda avanzada</span></div>
+    `;
+  }
+  if(statsSubModo==='estadisticas') return viewEstadisticasFlow();
+  return `
+    <div class="sectiontitle">Estadísticas</div>
+    <div class="fieldnote" style="margin-bottom:12px;">Mirá un resumen de lo trabajado con un cliente, o buscá un trabajo puntual.</div>
+    <div class="catlist">
+      <div class="cattile" onclick="statsSubModo='estadisticas'; statsPaso='cliente'; render()">
+        <div class="left"><span class="emoji">📊</span><span class="lab">Estadísticas por cliente</span></div>
+      </div>
+      <div class="cattile" onclick="statsSubModo='busqueda'; historialModo=null; render()">
+        <div class="left"><span class="emoji">🔍</span><span class="lab">Búsqueda de trabajos</span></div>
       </div>
     </div>
+  `;
+}
+function viewEstadisticasFlow(){
+  if(statsPaso==='cliente') return statsPasoCliente();
+  if(statsPaso==='rango') return statsPasoRango();
+  if(statsPaso==='categoria') return statsPasoCategoria();
+  if(statsPaso==='resultado') return statsPasoResultado();
+  return '';
+}
+function statsPasoCliente(){
+  const q = statsClienteBusqueda.toLowerCase();
+  const filtrados = q ? clientes.filter(c=>{
+    const estabTxt = (c.establecimientos||[]).map(e=>e.nombre+' '+(e.renspa||'')).join(' ').toLowerCase();
+    return clienteNombreCompleto(c).toLowerCase().includes(q) || estabTxt.includes(q);
+  }) : clientes;
+  return `
+    <button class="backbtn" onclick="statsSubModo=null; render()">‹ Estadísticas</button>
+    <div class="sectiontitle">¿De qué cliente?</div>
+    <input class="searchbar" placeholder="Buscar cliente o establecimiento..." value="${escapeHtml(statsClienteBusqueda)}" oninput="statsClienteBusqueda=this.value; render()">
+    ${filtrados.length ? filtrados.map(c=>`
+      <div class="listcard" onclick="statsClienteId='${c.id}'; statsPaso='rango'; render()">
+        <div class="top"><div class="name">${escapeHtml(clienteNombreCompleto(c))}</div></div>
+        <div class="meta">${(c.establecimientos||[]).map(e=>escapeHtml(e.nombre)).join(', ')||'Sin establecimientos'}</div>
+      </div>
+    `).join('') : '<div class="empty">No hay clientes que coincidan.</div>'}
+  `;
+}
+function statsPasoRango(){
+  const c = clienteById(statsClienteId);
+  return `
+    <button class="backbtn" onclick="statsPaso='cliente'; render()">‹ Volver</button>
+    <div class="sectiontitle">${c?escapeHtml(clienteNombreCompleto(c)):''}</div>
+    <div class="fieldnote" style="margin-bottom:6px;">Rango de fechas (opcional — dejá vacío para ver todo).</div>
+    <label>Desde</label>
+    <input type="date" id="stats_desde" value="${statsDesde}">
+    <label>Hasta</label>
+    <input type="date" id="stats_hasta" value="${statsHasta}">
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="statsConfirmarRango()">Continuar</button>
+  `;
+}
+function statsConfirmarRango(){
+  statsDesde = document.getElementById('stats_desde').value;
+  statsHasta = document.getElementById('stats_hasta').value;
+  statsPaso = 'categoria';
+  render();
+}
+function statsPasoCategoria(){
+  const c = clienteById(statsClienteId);
+  const cats = [
+    {id:'reproductivas', lab:'Reproductivas', emoji:'🧬'},
+    {id:'quirurgicas', lab:'Quirúrgicas', emoji:'🔪'},
+    {id:'sanitarias', lab:'Sanitarias', emoji:'💉'},
+    {id:'nutricionales', lab:'Nutricionales', emoji:'🌾'},
+    {id:'otros', lab:'Otros', emoji:'➕'},
+  ];
+  return `
+    <button class="backbtn" onclick="statsPaso='rango'; render()">‹ Volver</button>
+    <div class="sectiontitle">${c?escapeHtml(clienteNombreCompleto(c)):''}</div>
+    <div class="fieldnote" style="margin-bottom:10px;">${statsDesde||statsHasta ? `Período: ${statsDesde?fmtFecha(statsDesde):'siempre'} a ${statsHasta?fmtFecha(statsHasta):'hoy'}` : 'Todo el período'}</div>
+    <div class="catlist">
+      ${cats.map(cat=>`<div class="cattile" onclick="statsCategoria='${cat.id}'; statsPaso='resultado'; render()"><div class="left"><span class="emoji">${cat.emoji}</span><span class="lab">${cat.lab}</span></div></div>`).join('')}
+    </div>
+  `;
+}
+function statsTrabajosFiltrados(){
+  return trabajos.filter(t=>{
+    if(t.clienteId!==statsClienteId) return false;
+    if(statsDesde && (!t.fechaInicio || t.fechaInicio<statsDesde)) return false;
+    if(statsHasta && (!t.fechaInicio || t.fechaInicio>statsHasta)) return false;
+    return true;
+  });
+}
+function statsReproductivas(trabs){
+  let out = '';
+  const diag = {pren:0, vac:0, total:0};
+  let preservicioTotal=0, gdr1=0, gdr2=0;
+  const andrologicos = [];
+  trabs.forEach(t=>{
+    if(t.especie!=='Bovino') return;
+    const r = t.exploracionReproductiva;
+    if(r && r.diagnosticoGestacion && r.diagnosticoGestacion.registros){
+      r.diagnosticoGestacion.registros.forEach(reg=>{
+        diag.total++;
+        if(reg.resultado==='Preñada') diag.pren++;
+        else if(reg.resultado==='Vacía') diag.vac++;
+      });
+    }
+    if(r && r.preservicio && r.preservicio.registros){
+      r.preservicio.registros.forEach(reg=>{
+        preservicioTotal++;
+        if(reg.gdr===1) gdr1++;
+        if(reg.gdr===2) gdr2++;
+      });
+    }
+    if(t.examenAndrologico && hasData(t.examenAndrologico)){
+      const a = t.examenAndrologico;
+      andrologicos.push(`${fmtFecha(t.fechaInicio)} — Caravana ${a.caravana||'—'}: locomotor ${a.locomotor||'—'}, visión ${a.vision||'—'}, tono testicular ${a.tonoTesticular||'—'}`);
+    }
+  });
+  if(diag.total) out += `Diagnóstico de gestación:\n  ${diag.total} animales evaluados — ${diag.pren} preñadas, ${diag.vac} vacías\n\n`;
+  if(preservicioTotal) out += `Preservicio:\n  ${preservicioTotal} animales evaluados — GDR1: ${gdr1}, GDR2: ${gdr2}\n\n`;
+  if(andrologicos.length) out += `Examen andrológico (${andrologicos.length} toros evaluados):\n` + andrologicos.map(a=>'  '+a).join('\n') + '\n';
+  return out.trim();
+}
+function statsQuirurgicas(trabs){
+  let out = '';
+  let cirugias = [];
+  trabs.forEach(t=>{
+    const pq = t.procedimientosQuirurgicos;
+    if(!pq || !hasData(pq)) return;
+    Object.entries(pq).forEach(([k,v])=>{
+      if(k==='patologiasPodales' && v && v.animales){
+        v.animales.forEach(a=>{
+          if(a.hallazgos && a.hallazgos.length){
+            cirugias.push({fecha:t.fechaInicio, sistema:'Locomotor (podal)', animal:a.caravana, alta: a.seguimiento?a.seguimiento.alta:null});
+          }
+        });
+        return;
+      }
+      if(CLAVES_NO_SISTEMA_QX.includes(k)) return;
+      if(!v || !v.texto) return;
+      cirugias.push({fecha:t.fechaInicio, sistema:k, animal: v.caravana||'', alta: v.seguimiento?v.seguimiento.alta:null});
+    });
+  });
+  if(!cirugias.length) return '';
+  out += `Procedimientos quirúrgicos (${cirugias.length}):\n`;
+  cirugias.forEach(c=>{
+    out += `  ${fmtFecha(c.fecha)} — ${c.sistema}${c.animal?' ('+c.animal+')':''}${c.alta===true?' — Alta':c.alta===false?' — Baja':''}\n`;
+  });
+  const conSeguimiento = cirugias.filter(c=>c.alta===true || c.alta===false);
+  if(conSeguimiento.length){
+    const altas = conSeguimiento.filter(c=>c.alta===true).length;
+    const pct = Math.round((altas/conSeguimiento.length)*100);
+    out += `\n% de éxito (sobre ${conSeguimiento.length} con seguimiento cargado): ${pct}% (${altas} altas)\n`;
+  }
+  return out.trim();
+}
+function statsSanitarias(trabs){
+  let out = '';
+  trabs.forEach(t=>{
+    if(t.sanidad && hasData(t.sanidad)){
+      out += `${fmtFecha(t.fechaInicio)} — Sanidad:\n`;
+      if(t.sanidad.individual) Object.entries(t.sanidad.individual).forEach(([k,v])=>{ if(hasData(v)) out += `    Individual - ${k}: ${campoResumen(v)}\n`; });
+      if(t.sanidad.masivo) Object.entries(t.sanidad.masivo).forEach(([k,v])=>{
+        if(k==='vacunacion' && v && v.grupos && v.grupos.length){
+          v.grupos.forEach(g=>{ out += `    Vacuna: ${labelVacunaGrupo(g)} — ${g.animales.length} animales\n`; });
+        } else if(v && v.filas && v.filas.length){
+          out += `    Masivo - ${k}: ${v.filas.length} animales\n`;
+        }
+      });
+      const lista = listaVacunasPara(t.especie);
+      if(lista && t.sanidad.vacuna && typeof t.sanidad.vacuna==='object'){
+        lista.forEach(v=>{ if(t.sanidad.vacuna[v.key]) out += `    ${v.label}: aplicada ${fmtFecha(t.sanidad.vacuna[v.key].fecha)}\n`; });
+      }
+      VACUNAS.forEach(v=>{ if(t.sanidad[v.key]) out += `    ${v.label}: aplicada ${fmtFecha(t.sanidad[v.key].fecha)}\n`; });
+    }
+    if(t.tratamiento && hasData(t.tratamiento)){
+      out += `${fmtFecha(t.fechaInicio)} — Tratamiento:\n`;
+      if(hasData(t.tratamiento.individual)) out += `    Individual: ${campoResumen(t.tratamiento.individual)}\n`;
+      if(t.tratamiento.masivo && t.tratamiento.masivo.grupos) t.tratamiento.masivo.grupos.forEach(g=>{ out += `    ${g.descripcion} — ${g.animales.length} animales\n`; });
+    }
+    if(hasData(t.tratamientos)) out += `${fmtFecha(t.fechaInicio)} — Tratamiento: ${campoResumen(t.tratamientos)}\n`;
+  });
+  return out.trim();
+}
+function statsNutricionales(trabs){
+  let out = '';
+  trabs.forEach(t=>{ if(hasData(t.nutricion)) out += `${fmtFecha(t.fechaInicio)} — Dieta: ${campoResumen(t.nutricion)}\n`; });
+  return out.trim();
+}
+function statsOtros(trabs){
+  let out = '';
+  trabs.forEach(t=>{
+    if(hasData(t.otroProcedimiento)) out += `${fmtFecha(t.fechaInicio)} — Otro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
+    if(hasData(t.observacionesFinales)) out += `${fmtFecha(t.fechaInicio)} — Observaciones: ${campoResumen(t.observacionesFinales)}\n`;
+  });
+  return out.trim();
+}
+function statsPasoResultado(){
+  const c = clienteById(statsClienteId);
+  const trabs = statsTrabajosFiltrados();
+  let contenido = '';
+  if(statsCategoria==='reproductivas') contenido = statsReproductivas(trabs);
+  else if(statsCategoria==='quirurgicas') contenido = statsQuirurgicas(trabs);
+  else if(statsCategoria==='sanitarias') contenido = statsSanitarias(trabs);
+  else if(statsCategoria==='nutricionales') contenido = statsNutricionales(trabs);
+  else if(statsCategoria==='otros') contenido = statsOtros(trabs);
+  return `
+    <button class="backbtn" onclick="statsPaso='categoria'; render()">‹ Volver</button>
+    <div class="sectiontitle">${c?escapeHtml(clienteNombreCompleto(c)):''}</div>
+    <div class="reportbox">${escapeHtml(contenido) || 'No hay datos para mostrar en este período.'}</div>
   `;
 }
 
@@ -2868,6 +3749,7 @@ function resumenTrabajo(t){
     ['radiografia','ecografia','sangrado','otros'].forEach(k=>{ if(hasData(t.examenesComplementarios[k])) out += `  ${etiquetasComp[k]}: ${campoResumen(t.examenesComplementarios[k])}\n`; });
     const sm = t.examenesComplementarios.sangradoMasivo;
     if(sm && sm.tubos && sm.tubos.length) out += `  Análisis de sangre grupal: ${sm.tubos.length} animales\n`;
+    out += resumenTomaMuestra(t.examenesComplementarios.tomaMuestra);
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
@@ -2880,6 +3762,8 @@ function resumenTrabajo(t){
     VACUNAS.forEach(v=>{ if(t.sanidad[v.key]) out += `  ${v.label}: aplicada ${fmtFecha(t.sanidad[v.key].fecha)}, próxima ${fmtFecha(t.sanidad[v.key].proxima)}${t.sanidad[v.key].observaciones?' — '+t.sanidad[v.key].observaciones:''}\n`; });
     if(t.sanidad.sanidadMasiva && t.sanidad.sanidadMasiva.filas && t.sanidad.sanidadMasiva.filas.length) out += `  Sanidad masiva: ${t.sanidad.sanidadMasiva.filas.length} animales\n`;
   }
+  out += resumenNecropsia(t.necropsia);
+  out += resumenNutricion(t.nutricion);
   if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
   if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
   return out;
@@ -2930,6 +3814,7 @@ function resumenTrabajoBovino(t){
     const etiquetasCompB = {ecografia:'ecografía', radiografia:'radiografía', sangrado:'análisis de sangre', otro:'otro'};
     ['ecografia','radiografia','sangrado','otro'].forEach(k=>{ if(hasData(ex[k])) out += `  ${etiquetasCompB[k]}: ${campoResumen(ex[k])}\n`; });
     if(ex.sangradoMasivo && ex.sangradoMasivo.tubos && ex.sangradoMasivo.tubos.length) out += `  Análisis de sangre grupal: ${ex.sangradoMasivo.tubos.length} animales\n`;
+    out += resumenTomaMuestra(ex.tomaMuestra);
   }
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
@@ -2965,6 +3850,8 @@ function resumenTrabajoBovino(t){
       });
     }
   }
+  out += resumenNecropsia(t.necropsia);
+  out += resumenNutricion(t.nutricion);
   if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
   if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
   return out;
@@ -3193,6 +4080,116 @@ function eliminarInforme(id){
   navigate('informes');
 }
 
+// ================= CALENDARIO =================
+let calMes = null; // 'YYYY-MM'
+let calDiaSeleccionado = null; // 'YYYY-MM-DD'
+function mesActualISO(){ return hoyISO().slice(0,7); }
+function diasDelMes(mesISO){
+  const [y,m] = mesISO.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function primerDiaSemanaDelMes(mesISO){
+  const [y,m] = mesISO.split('-').map(Number);
+  return new Date(y, m-1, 1).getDay();
+}
+function eventosDelDia(fecha){ return eventos.filter(e=>e.fecha===fecha); }
+function viewCalendario(){
+  if(!calMes) calMes = mesActualISO();
+  if(calDiaSeleccionado) return viewCalendarioDia();
+  const numDias = diasDelMes(calMes);
+  const primerDia = primerDiaSemanaDelMes(calMes);
+  const [y,m] = calMes.split('-');
+  const nombreMes = new Date(Number(y), Number(m)-1, 1).toLocaleDateString('es-AR',{month:'long', year:'numeric'});
+  let celdas = [];
+  for(let i=0;i<primerDia;i++) celdas.push('');
+  for(let d=1; d<=numDias; d++) celdas.push(d);
+  return `
+    <button class="backbtn" onclick="calMes=null; calDiaSeleccionado=null; navigate('home')">‹ Inicio</button>
+    <div class="sectiontitle">Calendario</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <button class="backbtn" style="margin:0;" onclick="calMesAnterior()">‹</button>
+      <div style="font-weight:700; text-transform:capitalize;">${escapeHtml(nombreMes)}</div>
+      <button class="backbtn" style="margin:0;" onclick="calMesSiguiente()">›</button>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center; font-size:11px; color:var(--ink-soft); margin-bottom:4px;">
+      ${['D','L','M','M','J','V','S'].map(d=>`<div>${d}</div>`).join('')}
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px;">
+      ${celdas.map(d=>{
+        if(!d) return `<div></div>`;
+        const fecha = `${calMes}-${String(d).padStart(2,'0')}`;
+        const tieneEventos = eventosDelDia(fecha).length>0;
+        const esHoy = fecha===hoyISO();
+        return `<div onclick="calDiaSeleccionado='${fecha}'; render()" style="aspect-ratio:1; display:flex; align-items:center; justify-content:center; border-radius:7px; cursor:pointer; font-size:13px; background:${esHoy?'var(--teal)':'var(--card)'}; color:${esHoy?'#08181A':'var(--ink)'}; border:1px solid var(--line); position:relative;">
+          ${d}${tieneEventos?`<span style="position:absolute; bottom:3px; width:5px; height:5px; border-radius:50%; background:${esHoy?'#08181A':'var(--amber)'};"></span>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+function calMesAnterior(){
+  const [y,m] = calMes.split('-').map(Number);
+  const d = new Date(y, m-2, 1);
+  calMes = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  render();
+}
+function calMesSiguiente(){
+  const [y,m] = calMes.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  calMes = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  render();
+}
+function viewCalendarioDia(){
+  const fecha = calDiaSeleccionado;
+  const evs = eventosDelDia(fecha);
+  return `
+    <button class="backbtn" onclick="calDiaSeleccionado=null; render()">‹ Calendario</button>
+    <div class="sectiontitle">${fmtFecha(fecha)}</div>
+    <label>Nueva nota</label>
+    <textarea id="cal_nota_nueva" placeholder="Ej: ir a tal campo..."></textarea>
+    <button class="btn btn-teal" onclick="agregarEventoDia()">+ Agregar</button>
+    ${evs.length ? `<div class="sectiontitle">Notas de este día</div>` + evs.map(e=>`
+      <div class="listcard" style="cursor:default;">
+        <div class="meta">${escapeHtml(e.nota)}</div>
+        <div class="twobtn" style="margin-top:8px;">
+          <button class="btn btn-outline" style="margin-top:0; padding:8px;" onclick="agregarEventoICS('${e.fecha}', ${escapeHtml(JSON.stringify(e.nota))})">📅 Agregar a mi calendario</button>
+          <button class="btn btn-danger" style="margin-top:0; padding:8px;" onclick="eliminarEventoCal('${e.id}')">Eliminar</button>
+        </div>
+      </div>
+    `).join('') : '<div class="fieldnote">Todavía no hay notas para este día.</div>'}
+  `;
+}
+function agregarEventoDia(){
+  const texto = document.getElementById('cal_nota_nueva').value.trim();
+  if(!texto) return;
+  const nuevo = {id:uid(), fecha: calDiaSeleccionado, nota:texto, creado: new Date().toISOString()};
+  eventos.push(nuevo);
+  saveEventoDoc(nuevo);
+  render();
+}
+function eliminarEventoCal(id){
+  eventos = eventos.filter(e=>e.id!==id);
+  deleteEventoDoc(id);
+  render();
+}
+function generarICS(fecha, nota){
+  const dt = fecha.replace(/-/g,'');
+  const now = new Date().toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//IntegralVet//ES\r\nBEGIN:VEVENT\r\nUID:${uid()}@integralvet\r\nDTSTAMP:${now}\r\nDTSTART;VALUE=DATE:${dt}\r\nDTEND;VALUE=DATE:${dt}\r\nSUMMARY:${(nota||'Evento').replace(/\r?\n/g,' ')}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`;
+}
+function agregarEventoICS(fecha, nota){
+  const ics = generarICS(fecha, nota);
+  const blob = new Blob([ics], {type:'text/calendar'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'evento.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+
 // ---------------- INIT ----------------
 view = 'cargando';
 render();
@@ -3205,7 +4202,7 @@ fbAuth.onAuthStateChanged(function(user){
   } else {
     auth = null;
     sesionActiva = false;
-    clientes = []; trabajos = [];
+    clientes = []; trabajos = []; eventos = [];
     detachListeners();
     navigate('login');
   }
