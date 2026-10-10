@@ -937,7 +937,7 @@ function iniciarBovino(){
       examenGinecologico:{registros:[]},
       observacion:''
     },
-    examenAndrologico: {},
+    examenAndrologico: {}, examenAndrologicoLista: [],
     examenesComplementarios: {datosAnimal:{caravana:''}, sangradoMasivo:{tubos:[], observaciones:''}},
     procedimientosQuirurgicos: {},
     tratamiento: {individual:{texto:'',fotos:[]}, masivo:{grupos:[]}},
@@ -1427,6 +1427,7 @@ function muestraDatosIndividual(tm, especie){
     <div class="sectiontitle">Datos del paciente</div>
     <label>${campoLabel}</label>
     <input type="text" id="muestra_ind_id" value="${escapeHtml(ind[campoId]||'')}">
+    ${especie==='Bovino' ? bovColorWidget('muestraInd', ind) : ''}
     <label>Raza</label>
     <input type="text" id="muestra_ind_raza" value="${escapeHtml(ind.raza||'')}">
     <label>Pelaje</label>
@@ -1442,6 +1443,7 @@ function muestraGuardarIndividual(campoId){
   const tm = muestraObjetoActual();
   const obj = {raza: document.getElementById('muestra_ind_raza').value.trim(), pelaje: document.getElementById('muestra_ind_pelaje').value.trim(), sexo: document.getElementById('muestra_ind_sexo').value.trim(), edad: document.getElementById('muestra_ind_edad').value.trim()};
   obj[campoId] = document.getElementById('muestra_ind_id').value.trim();
+  if(campoId==='caravana'){ Object.assign(obj, bovColorGet('muestraInd')); bovColorReset('muestraInd'); }
   tm.individual = obj;
   muestraStep = 'observaciones';
   render();
@@ -1488,9 +1490,10 @@ function muestraDatosMasivoBovino(tm){
     <div class="sectiontitle">Caravanas (masivo)</div>
     <label>Caravana</label>
     <input type="text" id="muestra_masivo_caravana" placeholder="Número de caravana" inputmode="numeric" onkeydown="if(event.key==='Enter'){event.preventDefault(); muestraAgregarCaravanaMasivoBovino();}">
+    ${bovColorWidget('muestraMasivo')}
     <button class="btn btn-green" style="margin-top:10px;" onclick="muestraAgregarCaravanaMasivoBovino()">+ Agregar</button>
     <div class="sublist" style="margin-top:12px;">
-      ${animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)}</span><button class="removeanimal" onclick="muestraQuitarAnimalMasivo(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste caravanas.</div>'}
+      ${animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)}${escapeHtml(bovColorSufijo(a))}</span><button class="removeanimal" onclick="muestraQuitarAnimalMasivo(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste caravanas.</div>'}
     </div>
     <button class="btn btn-teal" style="margin-top:16px;" onclick="muestraStep='observaciones'; render()" ${animales.length?'':'disabled'}>Siguiente</button>
   `;
@@ -1500,7 +1503,8 @@ function muestraAgregarCaravanaMasivoBovino(){
   const input = document.getElementById('muestra_masivo_caravana');
   const val = input ? input.value.trim() : '';
   if(!val) return;
-  tm.masivo.animales.push({caravana: val});
+  tm.masivo.animales.push({caravana: val, ...bovColorGet('muestraMasivo')});
+  bovColorReset('muestraMasivo');
   render();
   setTimeout(()=>{ const el=document.getElementById('muestra_masivo_caravana'); if(el){ el.value=''; el.focus(); } }, 0);
 }
@@ -1549,12 +1553,12 @@ function resumenTomaMuestra(tm){
   });
   if(tm.modo==='individual' && tm.individual && hasData(tm.individual)){
     const ind = tm.individual;
-    const idCampo = ind.caravana!==undefined ? `Caravana ${ind.caravana||'—'}` : `Nombre ${ind.nombre||'—'}`;
+    const idCampo = ind.caravana!==undefined ? `Caravana ${ind.caravana||'—'}${bovColorSufijo(ind)}` : `Nombre ${ind.nombre||'—'}`;
     out += `    Paciente: ${idCampo} · ${ind.raza||''} · ${ind.pelaje||''} · ${ind.sexo||''} · ${ind.edad||''}\n`;
   } else if(tm.modo==='masivo' && tm.masivo && tm.masivo.animales && tm.masivo.animales.length){
     out += `    Animales (${tm.masivo.animales.length}):\n`;
     tm.masivo.animales.forEach(a=>{
-      if(a.caravana!==undefined) out += `      ${a.caravana}\n`;
+      if(a.caravana!==undefined) out += `      ${a.caravana}${bovColorSufijo(a)}\n`;
       else out += `      ${a.nombre} · ${a.raza||''} · ${a.pelaje||''} · ${a.sexo||''} · ${a.edad||''}\n`;
     });
   }
@@ -2612,7 +2616,7 @@ function viewBovinoCategorias(){
     {id:'registro', emoji:'🏷️', lab:'Registro', has: hasData(t.registro)},
     {id:'clinica', emoji:'🩺', lab:'Exploración clínica', has: hasData(t.exploracionClinica)},
     {id:'reproductiva', emoji:'🧬', lab:'Exploración reproductiva', has: hasData(t.exploracionReproductiva)},
-    {id:'andrologico', emoji:'🐂', lab:'Examen andrológico', has: hasData(t.examenAndrologico)},
+    {id:'andrologico', emoji:'🐂', lab:'Examen andrológico', has: (hasData(t.examenAndrologico)||hasData(t.examenAndrologicoLista))},
     {id:'complementarios', emoji:'🔬', lab:'Exámenes complementarios', has: hasData(t.examenesComplementarios)},
     {id:'quirurgicos', emoji:'🔪', lab:'Procedimientos quirúrgicos', has: hasData(t.procedimientosQuirurgicos)},
     {id:'tratamiento', emoji:'💉', lab:'Tratamiento', has: hasData(t.tratamiento)},
@@ -2663,12 +2667,14 @@ function catRegistro(){
     <div class="sectiontitle">Registro</div>
     <label>Caravana</label>
     <input type="text" id="reg_caravana" value="${escapeHtml(r.caravana||'')}" placeholder="N° de caravana">
+    ${bovColorWidget('registro', r)}
     <button class="btn btn-outline" style="margin-top:8px;" onclick="showToast('El escaneo con bastón lector se suma más adelante')">📡 Escanear chip (próximamente)</button>
     ${botonGuardarSimple('guardarRegistro')}
   `;
 }
 function guardarRegistro(estado){
-  trabajoActual.registro = {caravana: document.getElementById('reg_caravana').value.trim()};
+  trabajoActual.registro = {caravana: document.getElementById('reg_caravana').value.trim(), ...bovColorGet('registro')};
+  bovColorReset('registro');
   finalizarGuardado(estado);
 }
 
@@ -2698,8 +2704,92 @@ function guardarReproductivaBovinoFinal(estado){
   finalizarGuardado(estado);
 }
 
+// --- Datos comunes por animal (reproductiva bovina): color, condición corporal, aplicaciones ---
+const BOV_COLORES = ['Blanco','Rojo','Azul','Celeste','Amarillo','Verde','Otro'];
+const BOV_APLICACIONES = ['Bullsynch','Vacuna reproductiva','Vedevax','Prostaglandina','Benzoato de estradiol','Dispositivo','Folirec','Otra'];
+function bovExtrasVacios(){ return {color:null, colorOtro:'', cc:null, aplicaciones:[], aplicOtra:''}; }
+function bovExtrasAsegurar(tmp){ const d = window[tmp]; if(!Array.isArray(d.aplicaciones)) Object.assign(d, bovExtrasVacios()); return d; }
+function bovSetExtra(tmp, campo, valor){
+  const d = window[tmp];
+  if(campo==='color' && d.color===valor){ d.color=null; d.colorOtro=''; }
+  else { d[campo]=valor; if(campo==='color' && valor!=='Otro') d.colorOtro=''; }
+  render();
+}
+function bovToggleAplic(tmp, i){
+  const d = window[tmp], v = BOV_APLICACIONES[i];
+  const k = d.aplicaciones.indexOf(v);
+  if(k>=0) d.aplicaciones.splice(k,1); else d.aplicaciones.push(v);
+  render();
+}
+function bovExtrasTop(tmp){
+  const d = bovExtrasAsegurar(tmp);
+  return `
+    <div class="sectiontitle">Color</div>
+    <div class="optrow">${BOV_COLORES.map(c=>`<div class="optbtn ${d.color===c?'selected':''}" onclick="bovSetExtra('${tmp}','color','${c}')">${c}</div>`).join('')}</div>
+    ${d.color==='Otro' ? `<input type="text" value="${escapeHtml(d.colorOtro)}" oninput="window['${tmp}'].colorOtro=this.value" placeholder="¿Qué color?">` : ''}
+    <div class="sectiontitle">Condición corporal (obligatoria)</div>
+    <div class="optrow">${[1,2,3,4,5].map(n=>`<div class="optbtn ${d.cc===n?'selected':''}" onclick="bovSetExtra('${tmp}','cc',${n})">${n}</div>`).join('')}</div>
+  `;
+}
+function bovExtrasAplic(tmp){
+  const d = bovExtrasAsegurar(tmp);
+  return `
+    <div class="sectiontitle">Aplicaciones</div>
+    <div class="optrow">${BOV_APLICACIONES.map((a,i)=>`<div class="optbtn ${d.aplicaciones.includes(a)?'selected':''}" onclick="bovToggleAplic('${tmp}',${i})">${a}</div>`).join('')}</div>
+    ${d.aplicaciones.includes('Otra') ? `<input type="text" value="${escapeHtml(d.aplicOtra)}" oninput="window['${tmp}'].aplicOtra=this.value" placeholder="¿Cuál?">` : ''}
+  `;
+}
+function bovExtrasLinea(x){
+  const partes = [];
+  if(x.color) partes.push('color '+(x.color==='Otro' ? (x.colorOtro||'otro') : x.color));
+  if(x.cc) partes.push('CC '+x.cc);
+  if(x.aplicaciones && x.aplicaciones.length) partes.push('aplicaciones: '+x.aplicaciones.map(a=> a==='Otra' ? (x.aplicOtra||'Otra') : a).join(', '));
+  return partes.length ? ', '+partes.join(', ') : '';
+}
+
+// --- Color de caravana (bovino): selector sin re-render para no perder lo escrito ---
+window._bovColor = {};
+function bovColorCtx(n){ return n+'_'+(trabajoActual?trabajoActual.id:''); }
+function bovColorGet(n){
+  const st = window._bovColor[bovColorCtx(n)] || {};
+  return {color: st.color||null, colorOtro: st.color==='Otro' ? (st.otro||'') : ''};
+}
+function bovColorReset(n){ delete window._bovColor[bovColorCtx(n)]; }
+function bovColorPick(el, ctx, c){
+  const st = window._bovColor[ctx] = window._bovColor[ctx] || {color:null, otro:''};
+  const row = el.parentElement;
+  if(st.color===c){ st.color=null; el.classList.remove('selected'); }
+  else { st.color=c; row.querySelectorAll('.optbtn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
+  if(st.color!=='Otro') st.otro='';
+  const inp = row.nextElementSibling;
+  if(inp && inp.tagName==='INPUT'){ inp.style.display = st.color==='Otro' ? '' : 'none'; if(st.color!=='Otro') inp.value=''; }
+}
+function bovColorOtroSet(ctx, v){ const st = window._bovColor[ctx] = window._bovColor[ctx] || {color:null, otro:''}; st.otro = v; }
+function bovColorWidget(n, init){
+  const ctx = bovColorCtx(n);
+  if(!window._bovColor[ctx]) window._bovColor[ctx] = init && init.color ? {color:init.color, otro:init.colorOtro||''} : {color:null, otro:''};
+  const st = window._bovColor[ctx];
+  return `
+    <label>Color</label>
+    <div class="optrow" style="flex-wrap:wrap;">${BOV_COLORES.map(c=>`<div class="optbtn ${st.color===c?'selected':''}" onclick="bovColorPick(this,'${ctx}','${c}')">${c}</div>`).join('')}</div>
+    <input type="text" value="${escapeHtml(st.otro||'')}" style="${st.color==='Otro'?'':'display:none;'}" oninput="bovColorOtroSet('${ctx}',this.value)" placeholder="¿Qué color?">
+  `;
+}
+function bovColorTxt(x){ return x && x.color ? (x.color==='Otro' ? (x.colorOtro||'otro') : x.color) : ''; }
+function bovColorSufijo(x){ const c = bovColorTxt(x); return c ? ` (color ${c})` : ''; }
+// selector de color para filas dinámicas (lista de animales): usa un desplegable
+function bovColorSelectFila(arrName, i, x){
+  return `<select onchange="${arrName}[${i}].color=this.value||null; if(this.value!=='Otro') ${arrName}[${i}].colorOtro=''; renderFilasColor('${arrName}')">
+      <option value="">Color</option>${BOV_COLORES.map(c=>`<option value="${c}" ${x.color===c?'selected':''}>${c}</option>`).join('')}</select>
+    ${x.color==='Otro' ? `<input type="text" placeholder="¿Qué color?" value="${escapeHtml(x.colorOtro||'')}" onchange="${arrName}[${i}].colorOtro=this.value">` : ''}`;
+}
+function renderFilasColor(arrName){
+  if(arrName==='window._tubosBovinoTmp') renderTubosBovinoList();
+  else if(arrName==='window._sanMasivoTmp') renderSanMasivoList();
+}
+
 function subDiagnosticoGestacion(r){
-  if(!window._diagTmp) window._diagTmp = {caravana:'', resultado:null, subresultado:null, otro:''};
+  if(!window._diagTmp) window._diagTmp = {caravana:'', resultado:null, subresultado:null, otro:'', ...bovExtrasVacios()};
   const d = window._diagTmp;
   const regs = r.diagnosticoGestacion.registros;
   const prenadas = regs.filter(x=>x.resultado==='Preñada').length;
@@ -2718,6 +2808,7 @@ function subDiagnosticoGestacion(r){
     ${prenadas ? `<div class="fieldnote" style="margin-bottom:12px;">De las preñadas: Cabeza ${cab} · Cuerpo ${cue} · Cola ${col}</div>` : ''}
     <label>Caravana</label>
     <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._diagTmp.caravana=this.value" placeholder="N° de caravana">
+    ${bovExtrasTop('_diagTmp')}
     <div class="sectiontitle">Resultado</div>
     <div class="optrow">
       ${['Preñada','Vacía'].map(o=>`<div class="optbtn ${d.resultado===o?'selected':''}" onclick="setDiagResultado('${o}')">${o}</div>`).join('')}
@@ -2728,6 +2819,7 @@ function subDiagnosticoGestacion(r){
       </div>` : ''}
     <label>Otro (opcional)</label>
     <input type="text" value="${escapeHtml(d.otro)}" oninput="window._diagTmp.otro=this.value" placeholder="Algún detalle extra">
+    ${bovExtrasAplic('_diagTmp')}
     <button class="btn btn-green" onclick="agregarDiagRegistro()">+ Agregar y siguiente animal</button>
     <label style="margin-top:22px;">Comentario general</label>
     <textarea id="dg_comentario" placeholder="Ej: examen hecho por ultrasonografía...">${escapeHtml(r.diagnosticoGestacion.comentario||'')}</textarea>
@@ -2738,8 +2830,9 @@ function setDiagResultado(v){ window._diagTmp.resultado=v; if(v==='Vacía') wind
 function agregarDiagRegistro(){
   const d = window._diagTmp;
   if(!d.caravana || !d.resultado){ showToast('Falta caravana o resultado'); return; }
+  if(!d.cc){ showToast('Falta la condición corporal'); return; }
   trabajoActual.exploracionReproductiva.diagnosticoGestacion.registros.push({...d});
-  window._diagTmp = {caravana:'', resultado:null, subresultado:null, otro:''};
+  window._diagTmp = {caravana:'', resultado:null, subresultado:null, otro:'', ...bovExtrasVacios()};
   render();
 }
 function guardarDiagGestacionFinal(estado){
@@ -2748,7 +2841,7 @@ function guardarDiagGestacionFinal(estado){
 }
 
 function subPreservicio(r){
-  if(!window._presTmp) window._presTmp = {caravana:'', gdr:null, destino:null, destinoOtro:''};
+  if(!window._presTmp) window._presTmp = {caravana:'', gdr:null, destino:null, destinoOtro:'', ...bovExtrasVacios()};
   const p = window._presTmp;
   const regs = r.preservicio.registros;
   return `
@@ -2756,15 +2849,16 @@ function subPreservicio(r){
     <div class="sectiontitle">Preservicio (${regs.length} cargados)</div>
     <label>Caravana</label>
     <input type="text" value="${escapeHtml(p.caravana)}" oninput="window._presTmp.caravana=this.value" placeholder="N° de caravana">
+    ${bovExtrasTop('_presTmp')}
     <div class="sectiontitle">GDR (Grado de Desarrollo Reproductivo)</div>
     <div class="optrow">
       ${[1,2,3,4].map(n=>`<div class="optbtn ${p.gdr===n?'selected':''}" onclick="window._presTmp.gdr=${n}; render()">${n}</div>`).join('')}
     </div>
     <div class="sectiontitle">Destino</div>
     <div class="optrow">
-      ${['IATF','Servicio natural','Otra'].map(o=>`<div class="optbtn ${p.destino===o?'selected':''}" onclick="window._presTmp.destino='${o}'; render()">${o}</div>`).join('')}
+      ${['IATF','Servicio natural','Descarte'].map(o=>`<div class="optbtn ${p.destino===o?'selected':''}" onclick="window._presTmp.destino='${o}'; render()">${o}</div>`).join('')}
     </div>
-    ${p.destino==='Otra' ? `<label>¿A dónde?</label><input type="text" value="${escapeHtml(p.destinoOtro)}" oninput="window._presTmp.destinoOtro=this.value">` : ''}
+    ${bovExtrasAplic('_presTmp')}
     <button class="btn btn-green" onclick="agregarPresRegistro()">+ Agregar y siguiente animal</button>
     ${botonGuardarSimple('guardarPreservicioFinal')}
   `;
@@ -2772,8 +2866,9 @@ function subPreservicio(r){
 function agregarPresRegistro(){
   const p = window._presTmp;
   if(!p.caravana || !p.gdr || !p.destino){ showToast('Completá caravana, GDR y destino'); return; }
+  if(!p.cc){ showToast('Falta la condición corporal'); return; }
   trabajoActual.exploracionReproductiva.preservicio.registros.push({...p});
-  window._presTmp = {caravana:'', gdr:null, destino:null, destinoOtro:''};
+  window._presTmp = {caravana:'', gdr:null, destino:null, destinoOtro:'', ...bovExtrasVacios()};
   render();
 }
 function guardarPreservicioFinal(estado){ finalizarGuardado(estado); }
@@ -2791,7 +2886,7 @@ function subServicio(r){
   `;
 }
 function subServicioIatf(r){
-  if(!window._iatfTmp) window._iatfTmp = {caravana:'', fecha: hoyISO(), queHizo:''};
+  if(!window._iatfTmp) window._iatfTmp = {caravana:'', fecha: hoyISO(), queHizo:'', ...bovExtrasVacios()};
   const it = window._iatfTmp;
   const lista = r.servicio.iatf;
   return `
@@ -2799,10 +2894,12 @@ function subServicioIatf(r){
     <div class="sectiontitle">IATF (${lista.length} cargados)</div>
     <label>Caravana</label>
     <input type="text" value="${escapeHtml(it.caravana)}" oninput="window._iatfTmp.caravana=this.value">
+    ${bovExtrasTop('_iatfTmp')}
     <label>Fecha de inicio de protocolo</label>
     <input type="date" value="${it.fecha}" onchange="window._iatfTmp.fecha=this.value; render()">
     <label>Qué hiciste ese día</label>
     <input type="text" value="${escapeHtml(it.queHizo)}" oninput="window._iatfTmp.queHizo=this.value" placeholder="Ej: coloco dispositivo">
+    ${bovExtrasAplic('_iatfTmp')}
     <div class="fieldnote">Retiro de dispositivo: ${fmtFecha(sumarDias(it.fecha,7))} · Inseminación: ${fmtFecha(sumarDias(sumarDias(it.fecha,7),2))}</div>
     <button class="btn btn-green" style="margin-top:10px;" onclick="agregarIatfRegistro()">+ Agregar y siguiente animal</button>
     ${lista.length ? `<div class="sectiontitle">Cargados</div>${lista.map(x=>`
@@ -2810,6 +2907,7 @@ function subServicioIatf(r){
         <div class="meta"><b>Caravana ${escapeHtml(x.caravana)}</b> · inicio ${fmtFecha(x.fecha)}</div>
         <div class="meta">Retiro dispositivo: ${fmtFecha(x.retiro)} · IA: ${fmtFecha(x.inseminacion)}</div>
         ${x.queHizo?`<div class="meta">${escapeHtml(x.queHizo)}</div>`:''}
+        ${bovExtrasLinea(x)?`<div class="meta">${escapeHtml(bovExtrasLinea(x).slice(2))}</div>`:''}
       </div>`).join('')}` : ''}
     ${botonGuardarSimple('guardarServicioFinal')}
   `;
@@ -2817,10 +2915,11 @@ function subServicioIatf(r){
 function agregarIatfRegistro(){
   const it = window._iatfTmp;
   if(!it.caravana || !it.fecha){ showToast('Completá caravana y fecha'); return; }
+  if(!it.cc){ showToast('Falta la condición corporal'); return; }
   const retiro = sumarDias(it.fecha,7);
   const inseminacion = sumarDias(retiro,2);
-  trabajoActual.exploracionReproductiva.servicio.iatf.push({caravana:it.caravana, fecha:it.fecha, queHizo:it.queHizo, retiro, inseminacion});
-  window._iatfTmp = {caravana:'', fecha: hoyISO(), queHizo:''};
+  trabajoActual.exploracionReproductiva.servicio.iatf.push({...it, retiro, inseminacion});
+  window._iatfTmp = {caravana:'', fecha: hoyISO(), queHizo:'', ...bovExtrasVacios()};
   render();
 }
 function subServicioNatural(r){
@@ -2839,7 +2938,7 @@ function guardarServicioNatural(){
 function guardarServicioFinal(estado){ finalizarGuardado(estado); }
 
 function subExamenGinecologico(r){
-  if(!window._ginTmp) window._ginTmp = {caravana:'', texto:''};
+  if(!window._ginTmp) window._ginTmp = {caravana:'', texto:'', ...bovExtrasVacios()};
   const g = window._ginTmp;
   const lista = r.examenGinecologico.registros;
   return `
@@ -2847,32 +2946,91 @@ function subExamenGinecologico(r){
     <div class="sectiontitle">Examen ginecológico</div>
     <label>Caravana</label>
     <input type="text" value="${escapeHtml(g.caravana)}" oninput="window._ginTmp.caravana=this.value">
+    ${bovExtrasTop('_ginTmp')}
     <label>Observación</label>
     <textarea id="gin_texto" oninput="window._ginTmp.texto=this.value" placeholder="Lo que encontrás...">${escapeHtml(g.texto)}</textarea>
+    ${bovExtrasAplic('_ginTmp')}
     <button class="btn btn-outline" onclick="agregarGinRegistro()">+ Agregar</button>
-    ${lista.length ? lista.map(x=>`<div class="listcard" style="cursor:default; margin-top:10px;"><div class="meta"><b>Caravana ${escapeHtml(x.caravana)}</b></div><div class="meta">${escapeHtml(x.texto)}</div></div>`).join('') : ''}
+    ${lista.length ? lista.map(x=>`<div class="listcard" style="cursor:default; margin-top:10px;"><div class="meta"><b>Caravana ${escapeHtml(x.caravana)}</b>${escapeHtml(bovExtrasLinea(x))}</div><div class="meta">${escapeHtml(x.texto)}</div></div>`).join('') : ''}
   `;
 }
 function agregarGinRegistro(){
   const g = window._ginTmp;
   if(!g.caravana){ showToast('Falta la caravana'); return; }
+  if(!g.cc){ showToast('Falta la condición corporal'); return; }
   trabajoActual.exploracionReproductiva.examenGinecologico.registros.push({...g});
-  window._ginTmp = {caravana:'', texto:''};
+  window._ginTmp = {caravana:'', texto:'', ...bovExtrasVacios()};
   render();
 }
 
-// --- Examen andrológico ---
+// --- Examen andrológico (varios toros por trabajo) ---
+let androIdx = null, androTrabajoId = null; // null = lista; número = índice del toro en edición
+function androLista(){
+  const t = trabajoActual;
+  if(!Array.isArray(t.examenAndrologicoLista)) t.examenAndrologicoLista = [];
+  // migración: un andrológico viejo (objeto único) pasa a ser el primer toro de la lista
+  if(t.examenAndrologico && hasData(t.examenAndrologico)){
+    t.examenAndrologicoLista.unshift(t.examenAndrologico);
+    t.examenAndrologico = {};
+  }
+  return t.examenAndrologicoLista;
+}
+function androToros(t){
+  // todos los toros de un trabajo ya guardado (nuevo formato + formato viejo)
+  const out = [];
+  if(t.examenAndrologico && hasData(t.examenAndrologico)) out.push(t.examenAndrologico);
+  (t.examenAndrologicoLista||[]).forEach(a=>{ if(hasData(a)) out.push(a); });
+  return out;
+}
+function androNuevo(){
+  const l = androLista();
+  l.push({});
+  androIdx = l.length-1;
+  render();
+}
+function androAbrir(i){ androIdx = i; render(); }
+function androVolverLista(){
+  const l = androLista();
+  // si el toro quedó completamente vacío, se descarta
+  if(androIdx!==null && l[androIdx] && !hasData(l[androIdx])) l.splice(androIdx,1);
+  androIdx = null;
+  render();
+}
+function androQuitar(i){
+  if(!confirm('¿Eliminar este toro?')) return;
+  androLista().splice(i,1);
+  render();
+}
 function catAndrologico(){
-  const a = trabajoActual.examenAndrologico || {};
+  if(androTrabajoId!==trabajoActual.id){ androIdx=null; androTrabajoId=trabajoActual.id; }
+  const lista = androLista();
+  if(androIdx!==null && lista[androIdx]) return catAndrologicoForm(lista[androIdx], androIdx);
+  androIdx = null;
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
-    <div class="sectiontitle">Examen andrológico</div>
+    <div class="sectiontitle">Examen andrológico (${lista.length} ${lista.length===1?'toro':'toros'})</div>
+    ${lista.length ? `<div class="sublist">${lista.map((a,i)=>`
+      <div class="subtile" onclick="androAbrir(${i})"><span>🐂 Caravana ${escapeHtml(a.caravana||'—')}${escapeHtml(bovColorSufijo(a))}${a.raza?' · '+escapeHtml(a.raza):''}</span><span><span class="check">✓</span> <button class="removeanimal" onclick="event.stopPropagation(); androQuitar(${i})">✕</button></span></div>`).join('')}</div>` : '<div class="fieldnote">Todavía no cargaste ningún toro.</div>'}
+    <button class="btn btn-green" style="margin-top:14px;" onclick="androNuevo()">+ Nuevo toro</button>
+    ${botonGuardarSimple('guardarAndrologico')}
+  `;
+}
+function catAndrologicoForm(a, i){
+  const base = `['examenAndrologicoLista','${i}'`;
+  return `
+    <button class="backbtn" onclick="androVolverLista()">‹ Lista de toros</button>
+    <div class="sectiontitle">Toro ${i+1}</div>
     <label>Caravana</label>
-    <input type="text" id="an_caravana" value="${escapeHtml(a.caravana||'')}">
+    <input type="text" id="an_caravana" value="${escapeHtml(a.caravana||'')}" oninput="anSetCampo('caravana',this.value)">
+    <label>Color</label>
+    <div class="optrow" style="flex-wrap:wrap;">${BOV_COLORES.map(c=>`<div class="optbtn ${a.color===c?'selected':''}" onclick="setAndrologico('color','${c}')">${c}</div>`).join('')}</div>
+    ${a.color==='Otro' ? `<input type="text" value="${escapeHtml(a.colorOtro||'')}" oninput="anSetCampo('colorOtro',this.value)" placeholder="¿Qué color?">` : ''}
+    <div class="sectiontitle">Condición corporal</div>
+    <div class="optrow">${[1,2,3,4,5].map(n=>`<div class="optbtn ${a.cc===n?'selected':''}" onclick="setAndrologico('cc',${n})">${n}</div>`).join('')}</div>
     <label>Raza</label>
-    <input type="text" id="an_raza" value="${escapeHtml(a.raza||'')}">
+    <input type="text" id="an_raza" value="${escapeHtml(a.raza||'')}" oninput="anSetCampo('raza',this.value)">
     <label>Edad</label>
-    <input type="text" id="an_edad" value="${escapeHtml(a.edad||'')}">
+    <input type="text" id="an_edad" value="${escapeHtml(a.edad||'')}" oninput="anSetCampo('edad',this.value)">
     <div class="sectiontitle">Examen de aparato locomotor</div>
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.locomotor===o?'selected':''}" onclick="setAndrologico('locomotor','${o}')">${o}</div>`).join('')}</div>
     <div class="sectiontitle">Examen de aparato de la visión</div>
@@ -2882,34 +3040,37 @@ function catAndrologico(){
     <div class="sectiontitle">Exploración de glándulas anexas</div>
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.glandulasAnexas===o?'selected':''}" onclick="setAndrologico('glandulasAnexas','${o}')">${o}</div>`).join('')}</div>
     <label>Observaciones (glándulas anexas)</label>
-    <textarea id="an_glandulasAnexasObs" placeholder="Alguna observación adicional...">${escapeHtml(a.glandulasAnexasObs||'')}</textarea>
+    <textarea id="an_glandulasAnexasObs" placeholder="Alguna observación adicional..." oninput="anSetCampo('glandulasAnexasObs',this.value)">${escapeHtml(a.glandulasAnexasObs||'')}</textarea>
     <label>Circunferencia escrotal</label>
-    <textarea id="an_circunferencia" placeholder="Medida y detalle...">${escapeHtml((a.circunferencia||{}).texto||'')}</textarea>
-    ${fotosBlock((a.circunferencia||{}).fotos, ['examenAndrologico','circunferencia'])}
+    <textarea id="an_circunferencia" placeholder="Medida y detalle..." oninput="anSetTexto('circunferencia',this.value)">${escapeHtml((a.circunferencia||{}).texto||'')}</textarea>
+    ${fotosBlock((a.circunferencia||{}).fotos, ['examenAndrologicoLista',String(i),'circunferencia'])}
     <label>Ecografía testicular</label>
-    <textarea id="an_ecografia" placeholder="Hallazgos...">${escapeHtml((a.ecografia||{}).texto||'')}</textarea>
-    ${fotosBlock((a.ecografia||{}).fotos, ['examenAndrologico','ecografia'])}
+    <textarea id="an_ecografia" placeholder="Hallazgos..." oninput="anSetTexto('ecografia',this.value)">${escapeHtml((a.ecografia||{}).texto||'')}</textarea>
+    ${fotosBlock((a.ecografia||{}).fotos, ['examenAndrologicoLista',String(i),'ecografia'])}
     <label>Calidad seminal</label>
-    <textarea id="an_calidadSeminal" placeholder="Resultado...">${escapeHtml((a.calidadSeminal||{}).texto||'')}</textarea>
-    ${fotosBlock((a.calidadSeminal||{}).fotos, ['examenAndrologico','calidadSeminal'])}
-    ${botonGuardarSimple('guardarAndrologico')}
+    <textarea id="an_calidadSeminal" placeholder="Resultado..." oninput="anSetTexto('calidadSeminal',this.value)">${escapeHtml((a.calidadSeminal||{}).texto||'')}</textarea>
+    ${fotosBlock((a.calidadSeminal||{}).fotos, ['examenAndrologicoLista',String(i),'calidadSeminal'])}
+    <button class="btn btn-green" style="margin-top:22px;" onclick="androVolverLista()">Guardar toro y volver a la lista</button>
   `;
 }
+function anActual(){
+  const l = androLista();
+  return (androIdx!==null) ? l[androIdx] : null;
+}
+function anSetCampo(campo,valor){ const a=anActual(); if(a) a[campo]=valor; }
+function anSetTexto(campo,valor){
+  const a=anActual(); if(!a) return;
+  if(!a[campo]) a[campo]={texto:'',fotos:[]};
+  a[campo].texto = valor;
+}
 function setAndrologico(campo,valor){
-  if(!trabajoActual.examenAndrologico) trabajoActual.examenAndrologico={};
-  trabajoActual.examenAndrologico[campo]=valor;
+  const a=anActual(); if(a) a[campo]=valor;
   render();
 }
 function guardarAndrologico(estado){
-  const a = trabajoActual.examenAndrologico || {};
-  a.caravana = document.getElementById('an_caravana').value.trim();
-  a.raza = document.getElementById('an_raza').value.trim();
-  a.edad = document.getElementById('an_edad').value.trim();
-  a.glandulasAnexasObs = document.getElementById('an_glandulasAnexasObs').value.trim();
-  a.circunferencia = {texto: document.getElementById('an_circunferencia').value.trim(), fotos: (a.circunferencia||{}).fotos||[]};
-  a.ecografia = {texto: document.getElementById('an_ecografia').value.trim(), fotos: (a.ecografia||{}).fotos||[]};
-  a.calidadSeminal = {texto: document.getElementById('an_calidadSeminal').value.trim(), fotos: (a.calidadSeminal||{}).fotos||[]};
-  trabajoActual.examenAndrologico = a;
+  const l = androLista();
+  trabajoActual.examenAndrologicoLista = l.filter(a=>hasData(a));
+  androIdx = null;
   finalizarGuardado(estado);
 }
 
@@ -2925,6 +3086,7 @@ function catComplementariosBovino(){
       <div class="sectiontitle">Datos del animal</div>
       <label>Caravana</label>
       <input type="text" id="cxb_caravana" value="${escapeHtml((ex.datosAnimal||{}).caravana||'')}">
+      ${bovColorWidget('datosAnimal', ex.datosAnimal||{})}
       <button class="btn btn-teal" onclick="guardarDatosAnimalComplementario()">Listo, volver</button>
     `;
   }
@@ -2967,7 +3129,8 @@ function catComplementariosBovino(){
 }
 function guardarDatosAnimalComplementario(){
   if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios={};
-  trabajoActual.examenesComplementarios.datosAnimal = {caravana: document.getElementById('cxb_caravana').value.trim()};
+  trabajoActual.examenesComplementarios.datosAnimal = {caravana: document.getElementById('cxb_caravana').value.trim(), ...bovColorGet('datosAnimal')};
+  bovColorReset('datosAnimal');
   complementarioActivoBovino=null; render();
 }
 function guardarComplementarioBovinoSimple(){
@@ -2983,6 +3146,7 @@ function renderTubosBovinoList(){
     <div class="animalrow">
       <span class="tubolab">N°${i+1}</span>
       <input type="text" placeholder="Caravana" value="${escapeHtml(t.caravana)}" onchange="window._tubosBovinoTmp[${i}].caravana=this.value">
+      ${bovColorSelectFila('window._tubosBovinoTmp', i, t)}
       ${window._tubosBovinoTmp.length>1 ? `<button class="removeanimal" onclick="quitarTuboBovino(${i})">✕</button>` : ''}
     </div>`).join('');
 }
@@ -3006,9 +3170,14 @@ function agregarAnimalPodal(){
   if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos = {};
   const q = trabajoActual.procedimientosQuirurgicos;
   if(!q.patologiasPodales) q.patologiasPodales = {animales:[]};
-  if(!q.patologiasPodales.animales.find(a=>a.caravana===val)){
-    q.patologiasPodales.animales.push({caravana:val, hallazgos:[]});
+  const colorNuevo = bovColorGet('podal');
+  const existente = q.patologiasPodales.animales.find(a=>a.caravana===val);
+  if(!existente){
+    q.patologiasPodales.animales.push({caravana:val, ...colorNuevo, hallazgos:[]});
+  } else if(colorNuevo.color){
+    Object.assign(existente, colorNuevo);
   }
+  bovColorReset('podal');
   podalAnimalActivo = val;
   render();
 }
@@ -3096,7 +3265,7 @@ function catPodalAnimal(){
   if(podalWizard) return catPodalWizard();
   return `
     <button class="backbtn" onclick="podalAnimalActivo=null; render()">‹ Patologías podales</button>
-    <div class="sectiontitle">Caravana ${escapeHtml(animal.caravana)}</div>
+    <div class="sectiontitle">Caravana ${escapeHtml(animal.caravana)}${escapeHtml(bovColorSufijo(animal))}</div>
     <div class="fieldnote" style="margin-bottom:6px;">Tocá el tipo de hallazgo que encontraste en este animal.</div>
     <div class="sublist">
       ${PODAL_TIPOS.map(t=>`<div class="subtile" onclick="iniciarPodalWizard('${t.id}')"><span>${t.lab}</span></div>`).join('')}
@@ -3124,11 +3293,12 @@ function catPatologiasPodales(){
     <div class="sectiontitle">Patologías podales</div>
     <label>Identificación / caravana del animal</label>
     <input type="text" id="podal_nueva_caravana" placeholder="Ej: 245">
+    ${bovColorWidget('podal')}
     <button class="btn btn-teal" style="margin-top:10px;" onclick="agregarAnimalPodal()">+ Agregar animal</button>
     <div class="sublist" style="margin-top:16px;">
       ${(pp.animales||[]).map(a=>`
         <div class="subtile" onclick="podalAnimalActivo='${a.caravana}'; render()">
-          <span>🐄 Caravana ${escapeHtml(a.caravana)}</span>
+          <span>🐄 Caravana ${escapeHtml(a.caravana)}${escapeHtml(bovColorSufijo(a))}</span>
           <span class="check">${a.hallazgos.length} hallazgo${a.hallazgos.length===1?'':'s'}</span>
         </div>`).join('') || '<div class="fieldnote">Todavía no agregaste animales.</div>'}
     </div>
@@ -3140,7 +3310,7 @@ function resumenPatologiasPodales(pq){
   let out = `  Patologías podales:\n`;
   pp.animales.forEach(a=>{
     if(!a.hallazgos.length) return;
-    out += `    Caravana ${a.caravana}:\n`;
+    out += `    Caravana ${a.caravana}${bovColorSufijo(a)}:\n`;
     a.hallazgos.forEach(h=>{
       const lab = PODAL_TIPOS.find(t=>t.id===h.tipo).lab + (h.tipo==='otro'&&h.otroTexto ? ` (${h.otroTexto})` : '');
       const miembros = h.miembros.map(m=>PODAL_MIEMBROS.find(x=>x.id===m).lab).join(', ');
@@ -3183,6 +3353,7 @@ function catQuirurgicosBovino(){
       <div class="sectiontitle">${sistemaQuirurgicoActivoBovino}</div>
       <label>Caravana</label>
       <input type="text" id="qb_caravana" value="${escapeHtml(dato.caravana)}">
+      ${bovColorWidget('qb_'+sistemaQuirurgicoActivoBovino, dato)}
       <label>Qué hiciste / indicaste</label>
       <textarea id="qb_texto" placeholder="Describí el procedimiento...">${escapeHtml(dato.texto)}</textarea>
       ${fotosBlock(dato.fotos, ['procedimientosQuirurgicos',sistemaQuirurgicoActivoBovino])}
@@ -3221,9 +3392,11 @@ function guardarSistemaQuirurgicoBovino(){
   const previo = trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivoBovino] || {fotos:[]};
   trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivoBovino] = {
     caravana: document.getElementById('qb_caravana').value.trim(),
+    ...bovColorGet('qb_'+sistemaQuirurgicoActivoBovino),
     texto: document.getElementById('qb_texto').value.trim(),
     fotos: previo.fotos||[],
   };
+  bovColorReset('qb_'+sistemaQuirurgicoActivoBovino);
   sistemaQuirurgicoActivoBovino=null; render();
 }
 function guardarQuirurgicosBovinoFinal(estado){ finalizarGuardado(estado); }
@@ -3249,7 +3422,8 @@ function agregarAnimalTratMasiva(categoria){
   const caravana = inputCar ? inputCar.value.trim() : '';
   if(!caravana) return;
   const observacion = inputObs ? inputObs.value.trim() : '';
-  tratMasivaWizard.animales.push({caravana, categoria, observacion});
+  tratMasivaWizard.animales.push({caravana, ...bovColorGet('tratm'), categoria, observacion});
+  bovColorReset('tratm');
   render();
   setTimeout(()=>{
     const el1=document.getElementById('tratm_caravana_input'); if(el1){ el1.value=''; el1.focus(); }
@@ -3282,12 +3456,13 @@ function catTratMasivaWizardView(){
     <div class="sectiontitle">${escapeHtml(w.descripcion)}</div>
     <label>Caravana</label>
     <input type="text" id="tratm_caravana_input" placeholder="Número de caravana" inputmode="numeric">
+    ${bovColorWidget('tratm')}
     <label>Observación (opcional)</label>
-    <input type="text" id="tratm_obs_input" placeholder="Ej: color, propietario, algún dato de este animal...">
+    <input type="text" id="tratm_obs_input" placeholder="Ej: propietario, algún dato de este animal...">
     <div class="fieldnote" style="margin:6px 0;">Tocá la categoría del animal para guardarlo y pasar al siguiente.</div>
     <div class="optrow" style="flex-wrap:wrap;">${SANIDAD_CATEGORIAS_BOVINO.map(c=>`<div class="optbtn" onclick="agregarAnimalTratMasiva('${c}')">${c}</div>`).join('')}</div>
     <div class="sublist" style="margin-top:12px;">
-      ${w.animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)} — ${a.categoria}${a.observacion?' · '+escapeHtml(a.observacion):''}</span><button class="removeanimal" onclick="quitarAnimalTratMasiva(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste animales.</div>'}
+      ${w.animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)}${escapeHtml(bovColorSufijo(a))} — ${a.categoria}${a.observacion?' · '+escapeHtml(a.observacion):''}</span><button class="removeanimal" onclick="quitarAnimalTratMasiva(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste animales.</div>'}
     </div>
     <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarGrupoTratMasiva()" ${w.animales.length?'':'disabled'}>Guardar grupo</button>
   `;
@@ -3302,7 +3477,7 @@ function catTratamientoMasivoBovino(){
     ${grupos.length ? grupos.map((g,i)=>`
       <div class="listcard">
         <div class="meta"><b>${escapeHtml(g.descripcion)}</b><br>
-        Animales: ${g.animales.length} (${g.animales.map(a=>a.caravana+' '+a.categoria).join(', ')})</div>
+        Animales: ${g.animales.length} (${g.animales.map(a=>a.caravana+bovColorSufijo(a)+' '+a.categoria).join(', ')})</div>
         <button class="removeanimal" onclick="quitarGrupoTratMasiva(${i})">✕</button>
       </div>`).join('') : '<div class="fieldnote">Todavía no cargaste ningún grupo.</div>'}
     <button class="btn btn-teal" style="margin-top:16px;" onclick="tratamientoModoBovino=null; render()">Listo, volver</button>
@@ -3367,7 +3542,8 @@ function agregarAnimalVacMasiva(categoria){
   const input = document.getElementById('vacm_caravana_input');
   const val = input ? input.value.trim() : '';
   if(!val) return;
-  vacMasivaWizard.animales.push({caravana: val, categoria});
+  vacMasivaWizard.animales.push({caravana: val, ...bovColorGet('vacm'), categoria});
+  bovColorReset('vacm');
   render();
   setTimeout(()=>{ const el=document.getElementById('vacm_caravana_input'); if(el){ el.value=''; el.focus(); } }, 0);
 }
@@ -3420,10 +3596,11 @@ function catVacMasivaWizardView(){
       <div class="sectiontitle">${labelVacunaGrupo(w)}</div>
       <label>Caravana</label>
       <input type="text" id="vacm_caravana_input" placeholder="Número de caravana" inputmode="numeric">
+      ${bovColorWidget('vacm')}
       <div class="fieldnote" style="margin:6px 0;">Tocá la categoría del animal para guardarlo y pasar al siguiente.</div>
       <div class="optrow" style="flex-wrap:wrap;">${SANIDAD_CATEGORIAS_BOVINO.map(c=>`<div class="optbtn" onclick="agregarAnimalVacMasiva('${c}')">${c}</div>`).join('')}</div>
       <div class="sublist" style="margin-top:12px;">
-        ${w.animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)} — ${a.categoria}</span><button class="removeanimal" onclick="quitarAnimalVacMasiva(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste animales.</div>'}
+        ${w.animales.map((a,i)=>`<div class="subtile"><span>🐄 ${escapeHtml(a.caravana)}${escapeHtml(bovColorSufijo(a))} — ${a.categoria}</span><button class="removeanimal" onclick="quitarAnimalVacMasiva(${i})">✕</button></div>`).join('') || '<div class="fieldnote">Todavía no cargaste animales.</div>'}
       </div>
       <button class="btn btn-teal" style="margin-top:16px;" onclick="avanzarVacMasivaFinal()" ${w.animales.length?'':'disabled'}>Siguiente</button>
     `;
@@ -3449,7 +3626,7 @@ function catVacunacionMasivaBovino(){
     ${grupos.length ? grupos.map((g,i)=>`
       <div class="listcard">
         <div class="meta"><b>${labelVacunaGrupo(g)}</b><br>
-        Animales: ${g.animales.length} (${g.animales.map(a=>a.caravana+' '+a.categoria).join(', ')})
+        Animales: ${g.animales.length} (${g.animales.map(a=>a.caravana+bovColorSufijo(a)+' '+a.categoria).join(', ')})
         ${g.dosis?`<br>Dosis: ${escapeHtml(g.dosis)}`:''}${g.repetir?`<br>⚠️ Repetir: ${escapeHtml(g.repetir)}`:''}</div>
         <button class="removeanimal" onclick="quitarGrupoVacMasiva(${i})">✕</button>
       </div>`).join('') : '<div class="fieldnote">Todavía no cargaste ningún grupo.</div>'}
@@ -3519,6 +3696,7 @@ function renderSanMasivoList(){
   el.innerHTML = window._sanMasivoTmp.map((f,i)=>`
     <div class="animalrow">
       <input type="text" placeholder="Caravana" value="${escapeHtml(f.caravana)}" onchange="window._sanMasivoTmp[${i}].caravana=this.value">
+      ${bovColorSelectFila('window._sanMasivoTmp', i, f)}
       <input type="text" placeholder="Producto" value="${escapeHtml(f.producto)}" onchange="window._sanMasivoTmp[${i}].producto=this.value">
       <input type="text" placeholder="Dosis" value="${escapeHtml(f.dosis)}" onchange="window._sanMasivoTmp[${i}].dosis=this.value">
       <input type="text" placeholder="Repetir" value="${escapeHtml(f.repetir)}" onchange="window._sanMasivoTmp[${i}].repetir=this.value">
@@ -4138,10 +4316,9 @@ function statsReproductivas(trabs){
         if(reg.gdr===2) gdr2++;
       });
     }
-    if(t.examenAndrologico && hasData(t.examenAndrologico)){
-      const a = t.examenAndrologico;
-      andrologicos.push(`${fmtFecha(t.fechaInicio)} — Caravana ${a.caravana||'—'}: locomotor ${a.locomotor||'—'}, visión ${a.vision||'—'}, tono testicular ${a.tonoTesticular||'—'}`);
-    }
+    androToros(t).forEach(a=>{
+      andrologicos.push(`${fmtFecha(t.fechaInicio)} — Caravana ${a.caravana||'—'}${bovColorSufijo(a)}: locomotor ${a.locomotor||'—'}, visión ${a.vision||'—'}, tono testicular ${a.tonoTesticular||'—'}`);
+    });
   });
   if(diag.total) out += `Diagnóstico de gestación:\n  ${diag.total} animales evaluados — ${diag.pren} preñadas, ${diag.vac} vacías\n\n`;
   if(preservicioTotal) out += `Preservicio:\n  ${preservicioTotal} animales evaluados — GDR1: ${gdr1}, GDR2: ${gdr2}\n\n`;
@@ -4398,7 +4575,7 @@ function resumenTrabajo(t){
 }
 function resumenTrabajoBovino(t){
   let out = `Especie: Bovino\n`;
-  if(t.registro && t.registro.caravana) out += `\nCaravana de registro: ${t.registro.caravana}\n`;
+  if(t.registro && t.registro.caravana) out += `\nCaravana de registro: ${t.registro.caravana}${bovColorSufijo(t.registro)}\n`;
   if(t.exploracionClinica && hasData(t.exploracionClinica)){
     out += `\nExploración clínica:\n`;
     if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
@@ -4414,34 +4591,59 @@ function resumenTrabajoBovino(t){
       const pren = dg.registros.filter(x=>x.resultado==='Preñada').length;
       const vac = dg.registros.filter(x=>x.resultado==='Vacía').length;
       out += `  Diagnóstico de gestación: ${dg.registros.length} animales (${pren} preñadas, ${vac} vacías)\n`;
+      dg.registros.forEach(x=>{
+        out += `    Caravana ${x.caravana||'—'}: ${x.resultado||'—'}${x.subresultado?' ('+x.subresultado+')':''}${x.otro?', '+x.otro:''}${bovExtrasLinea(x)}\n`;
+      });
       if(dg.comentario) out += `    Comentario: ${dg.comentario}\n`;
     }
-    if(r.preservicio && r.preservicio.registros && r.preservicio.registros.length) out += `  Preservicio: ${r.preservicio.registros.length} animales\n`;
+    if(r.preservicio && r.preservicio.registros && r.preservicio.registros.length){
+      out += `  Preservicio: ${r.preservicio.registros.length} animales\n`;
+      r.preservicio.registros.forEach(x=>{
+        out += `    Caravana ${x.caravana||'—'}: GDR ${x.gdr||'—'}, destino ${x.destino==='Otra'?(x.destinoOtro||'Otra'):(x.destino||'—')}${bovExtrasLinea(x)}\n`;
+      });
+    }
     if(r.servicio){
-      if(r.servicio.iatf && r.servicio.iatf.length) out += `  Servicio IATF: ${r.servicio.iatf.length} animales\n`;
+      if(r.servicio.iatf && r.servicio.iatf.length){
+        out += `  Servicio IATF: ${r.servicio.iatf.length} animales\n`;
+        r.servicio.iatf.forEach(x=>{
+          out += `    Caravana ${x.caravana||'—'}: inicio ${fmtFecha(x.fecha)}, retiro dispositivo ${fmtFecha(x.retiro)}, inseminación ${fmtFecha(x.inseminacion)}${x.queHizo?', '+x.queHizo:''}${bovExtrasLinea(x)}\n`;
+        });
+      }
       if(r.servicio.natural) out += `  Servicio natural: ${r.servicio.natural}\n`;
     }
-    if(r.examenGinecologico && r.examenGinecologico.registros && r.examenGinecologico.registros.length) out += `  Examen ginecológico: ${r.examenGinecologico.registros.length} animales\n`;
+    if(r.examenGinecologico && r.examenGinecologico.registros && r.examenGinecologico.registros.length){
+      out += `  Examen ginecológico: ${r.examenGinecologico.registros.length} animales\n`;
+      r.examenGinecologico.registros.forEach(x=>{
+        out += `    Caravana ${x.caravana||'—'}${bovExtrasLinea(x)}${x.texto?': '+x.texto:''}\n`;
+      });
+    }
     if(r.observacion) out += `  Observación general: ${r.observacion}\n`;
   }
-  if(t.examenAndrologico && hasData(t.examenAndrologico)){
-    const a = t.examenAndrologico;
-    out += `\nExamen andrológico: caravana ${a.caravana||'—'}, raza ${a.raza||'—'}, edad ${a.edad||'—'}\n`;
-    if(a.locomotor) out += `  Ap. locomotor: ${a.locomotor}\n`;
-    if(a.vision) out += `  Ap. visión: ${a.vision}\n`;
-    if(a.tonoTesticular) out += `  Tono testicular: ${a.tonoTesticular}\n`;
-    if(a.glandulasAnexas) out += `  Exploración de glándulas anexas: ${a.glandulasAnexas}${a.glandulasAnexasObs?' — '+a.glandulasAnexasObs:''}\n`;
-    if(hasData(a.circunferencia)) out += `  Circunferencia escrotal: ${campoResumen(a.circunferencia)}\n`;
-    if(hasData(a.ecografia)) out += `  Ecografía testicular: ${campoResumen(a.ecografia)}\n`;
-    if(hasData(a.calidadSeminal)) out += `  Calidad seminal: ${campoResumen(a.calidadSeminal)}\n`;
+  const toros = androToros(t);
+  if(toros.length){
+    toros.forEach((a,idx)=>{
+      out += `\nExamen andrológico${toros.length>1?' (toro '+(idx+1)+' de '+toros.length+')':''}: caravana ${a.caravana||'—'}${bovColorSufijo(a)}, raza ${a.raza||'—'}, edad ${a.edad||'—'}\n`;
+      if(a.cc) out += `  Condición corporal: ${a.cc}\n`;
+      if(a.locomotor) out += `  Ap. locomotor: ${a.locomotor}\n`;
+      if(a.vision) out += `  Ap. visión: ${a.vision}\n`;
+      if(a.tonoTesticular) out += `  Tono testicular: ${a.tonoTesticular}\n`;
+      if(a.glandulasAnexas) out += `  Exploración de glándulas anexas: ${a.glandulasAnexas}${a.glandulasAnexasObs?' — '+a.glandulasAnexasObs:''}\n`;
+      if(hasData(a.circunferencia)) out += `  Circunferencia escrotal: ${campoResumen(a.circunferencia)}\n`;
+      if(hasData(a.ecografia)) out += `  Ecografía testicular: ${campoResumen(a.ecografia)}\n`;
+      if(hasData(a.calidadSeminal)) out += `  Calidad seminal: ${campoResumen(a.calidadSeminal)}\n`;
+    });
   }
   if(t.examenesComplementarios && hasData(t.examenesComplementarios)){
     const ex = t.examenesComplementarios;
     out += `\nExámenes complementarios:\n`;
-    if(ex.datosAnimal && ex.datosAnimal.caravana) out += `  Caravana: ${ex.datosAnimal.caravana}\n`;
+    if(ex.datosAnimal && ex.datosAnimal.caravana) out += `  Caravana: ${ex.datosAnimal.caravana}${bovColorSufijo(ex.datosAnimal)}\n`;
     const etiquetasCompB = {ecografia:'ecografía', radiografia:'radiografía', sangrado:'análisis de sangre', otro:'otro'};
     ['ecografia','radiografia','sangrado','otro'].forEach(k=>{ if(hasData(ex[k])) out += `  ${etiquetasCompB[k]}: ${campoResumen(ex[k])}\n`; });
-    if(ex.sangradoMasivo && ex.sangradoMasivo.tubos && ex.sangradoMasivo.tubos.length) out += `  Análisis de sangre grupal: ${ex.sangradoMasivo.tubos.length} animales\n`;
+    if(ex.sangradoMasivo && ex.sangradoMasivo.tubos && ex.sangradoMasivo.tubos.length){
+      out += `  Análisis de sangre grupal: ${ex.sangradoMasivo.tubos.length} animales\n`;
+      ex.sangradoMasivo.tubos.forEach(tb=>{ if(tb.caravana) out += `    Caravana ${tb.caravana}${bovColorSufijo(tb)}\n`; });
+      if(ex.sangradoMasivo.observaciones) out += `    Observaciones: ${ex.sangradoMasivo.observaciones}\n`;
+    }
     out += resumenTomaMuestra(ex.tomaMuestra);
     out += resumenExamenImagen('radiografia', ex.radiografiaDetalle);
     out += resumenExamenImagen('ecografia', ex.ecografiaDetalle);
@@ -4449,7 +4651,7 @@ function resumenTrabajoBovino(t){
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
     out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
-    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (caravana ${v.caravana||'—'})\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (caravana ${v.caravana||'—'}${bovColorTxt(v)?', color '+bovColorTxt(v):''})\n    Qué se hizo: ${campoResumen(v)}\n`; });
     out += resumenPatologiasPodales(t.procedimientosQuirurgicos);
   }
   if(t.sanidad && hasData(t.sanidad)){
@@ -4462,10 +4664,12 @@ function resumenTrabajoBovino(t){
           if(g.dosis) out += `    Dosis: ${g.dosis}\n`;
           if(g.repetir) out += `    ⚠️ REPETIR: ${g.repetir}\n`;
           out += `    Animales tratados: ${g.animales.length}\n`;
-          g.animales.forEach(a=> out += `      ${a.caravana} - ${a.categoria}\n`);
+          g.animales.forEach(a=> out += `      ${a.caravana}${bovColorSufijo(a)} - ${a.categoria}\n`);
         });
       } else if(v && v.filas && v.filas.length){
         out += `  Masivo - ${k}: ${v.filas.length} animales\n`;
+        v.filas.forEach(f=>{ if(f.caravana||f.producto) out += `    Caravana ${f.caravana||'—'}${bovColorSufijo(f)}${f.producto?': '+f.producto:''}${f.dosis?', dosis '+f.dosis:''}${f.repetir?', repetir '+f.repetir:''}\n`; });
+        if(v.observaciones) out += `    Observaciones: ${v.observaciones}\n`;
       }
     });
   }
@@ -4476,7 +4680,7 @@ function resumenTrabajoBovino(t){
       t.tratamiento.masivo.grupos.forEach(g=>{
         out += `  Tratamiento utilizado: ${g.descripcion}\n`;
         out += `    Animales tratados: ${g.animales.length}\n`;
-        g.animales.forEach(a=> out += `      ${a.caravana} - ${a.categoria}${a.observacion?' — '+a.observacion:''}\n`);
+        g.animales.forEach(a=> out += `      ${a.caravana}${bovColorSufijo(a)} - ${a.categoria}${a.observacion?' — '+a.observacion:''}\n`);
       });
     }
   }
