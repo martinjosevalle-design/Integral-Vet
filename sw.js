@@ -9,7 +9,7 @@
 // Si en el futuro hacés un cambio grande y notás que el ícono no actualiza, subí este
 // archivo con CACHE_VERSION cambiado (ej: 'integral-vet-v5') para forzar una caché nueva.
 
-const CACHE_VERSION = 'integral-vet-v4';
+const CACHE_VERSION = 'integral-vet-v5';
 
 const APP_SHELL = [
   './',
@@ -66,7 +66,7 @@ self.addEventListener('fetch', event => {
   if (!esCacheable(url)) return; // Firestore/Auth siguen su camino normal, sin pasar por acá
 
   event.respondWith(
-    fetch(req)
+    fetch(req, {cache: 'no-cache'})
       .then(res => {
         // Con conexión: siempre servimos lo más nuevo y actualizamos la copia guardada.
         if (res && res.status === 200) {
