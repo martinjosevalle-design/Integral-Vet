@@ -312,6 +312,8 @@ const SANIDAD_DESPARASITANTES_EQUINO = [
 let unsubClientes = null;
 let unsubTrabajos = null;
 let unsubEventos = null;
+let unsubBorradores = null;
+let borradores = [];
 
 function attachListeners(){
   if(unsubClientes) unsubClientes();
@@ -325,6 +327,11 @@ function attachListeners(){
     trabajos = snap.docs.map(function(d){ return d.data(); });
     if(sesionActiva) render();
   }, function(err){ console.error('Error sincronizando trabajos', err); });
+  if(unsubBorradores) unsubBorradores();
+  unsubBorradores = db.collection('borradores').onSnapshot(function(snap){
+    borradores = snap.docs.map(function(d){ return d.data(); });
+    if(sesionActiva && view==='home') render();
+  }, function(err){ console.warn('Borradores en la nube no disponibles', err); });
   unsubEventos = db.collection('eventos').onSnapshot(function(snap){
     eventos = snap.docs.map(function(d){ return d.data(); });
     if(sesionActiva) render();
@@ -334,6 +341,7 @@ function detachListeners(){
   if(unsubClientes){ unsubClientes(); unsubClientes=null; }
   if(unsubTrabajos){ unsubTrabajos(); unsubTrabajos=null; }
   if(unsubEventos){ unsubEventos(); unsubEventos=null; }
+  if(unsubBorradores){ unsubBorradores(); unsubBorradores=null; }
 }
 function saveClienteDoc(c){ db.collection('clientes').doc(c.id).set(c).catch(function(err){ console.error(err); }); }
 function deleteClienteDoc(id){ db.collection('clientes').doc(id).delete().catch(function(err){ console.error(err); }); }
@@ -423,6 +431,10 @@ function renderNav(){
     </button>`).join('');
 }
 function salirANuevaSeccion(id){
+  if(trabajoActual){ preguntarSalida(function(){ _salirANuevaSeccion(id); }); return; }
+  _salirANuevaSeccion(id);
+}
+function _salirANuevaSeccion(id){
   editingId=null; trabajoActual=null; clienteContexto=null; clienteEstablecimientoContexto=null; historialModo=null;
   informesModo=null; informesBusquedaModo=null; informeVerId=null;
   statsSubModo=null; statsClienteId=null; statsClienteBusqueda=''; statsDesde=''; statsHasta=''; statsCategoria=null; statsPaso='cliente'; statsEstabId=null; statsEspecie=null; pacCliente=null; pacEstab=null; pacPaso='cliente'; pacDesde=''; pacHasta=''; pacIdent=''; pacBusqCliente='';
@@ -463,6 +475,7 @@ function render(){
   else if(view==='informe-ver') main.innerHTML = viewInformeCompleto();
   else if(view==='calendario') main.innerHTML = viewCalendario();
   afterRenderHooks();
+  autoguardarBorrador();
 }
 function afterRenderHooks(){
   if(view==='clienteBuscar') filtrarClientesLive();
@@ -675,6 +688,7 @@ function viewHome(){
   const recCalendario = recordatoriosCalendario();
   const recSanidadEquino = recordatoriosSanidadEquino();
   return `
+    ${borradoresHomeHTML()}
     ${recCalendario.length ? `
       <div class="sectiontitle">Próximos eventos (48 hs)</div>
       ${recCalendario.map(e=>`<div class="alertcard"><b>${fmtFecha(e.fecha)}</b> — ${escapeHtml(e.nota)}</div>`).join('')}
@@ -978,6 +992,9 @@ function guardarTrabajoActual(estadoFinal){
   if(!trabajoActual.creado) trabajoActual.creado = new Date().toISOString();
   if(!trabajoActual.cadenaId) trabajoActual.cadenaId = trabajoActual.id;
   trabajoActual.estado = estadoFinal;
+  borradorEliminar(trabajoActual._borradorId);
+  delete trabajoActual._borradorId;
+  _snapRef = trabajoActual; _snapStr = JSON.stringify(trabajoActual);
   const idx = trabajos.findIndex(t=>t.id===trabajoActual.id);
   const copia = JSON.parse(JSON.stringify(trabajoActual));
   if(idx>=0) trabajos[idx]=copia; else trabajos.push(copia);
@@ -1026,14 +1043,114 @@ function viewEquinoCategorias(){
 }
 function guardarDesdeCategorias(estado){ finalizarGuardado(estado); }
 function guardarDesdeCategoriasMascota(estado){ finalizarGuardadoMascota(estado, 'mascotaCategorias'); }
-function salirSinGuardarDesdeCategorias(){ trabajoActual=null; navigate('home'); }
+function salirSinGuardarDesdeCategorias(){ if(trabajoActual) borradorEliminar(trabajoActual._borradorId); trabajoActual=null; navigate('home'); }
 function salirDeTrabajo(){
-  if(hasData(trabajoActual.datosPaciente)||hasData(trabajoActual.exploracionClinica)||hasData(trabajoActual.tratamiento)){
-    if(!confirm('Tenés datos sin guardar en este trabajo. ¿Salir de todas formas?')) return;
-  }
-  trabajoActual = null;
-  navigate('home');
+  preguntarSalida(function(){ navigate('home'); });
 }
+
+// ================= BORRADORES (autoguardado) Y AVISO AL SALIR =================
+let _snapRef = null, _snapStr = '', _autoTimer = null, _autoUltimo = '';
+const CLAVES_DATOS_TRABAJO = ['datosPaciente','informacionGeneral','registro','exploracionClinica','exploracionReproductiva','examenAndrologico','examenAndrologicoLista','examenesComplementarios','procedimientosQuirurgicos','tratamiento','tratamientos','sanidad','sanidadEquino','necropsia','nutricion','otroProcedimiento','observacionesFinales'];
+function trabajoTieneDatos(t){ return !!t && CLAVES_DATOS_TRABAJO.some(k=>hasData(t[k])); }
+function trabajoSucio(){ return !!trabajoActual && trabajoTieneDatos(trabajoActual) && JSON.stringify(trabajoActual)!==_snapStr; }
+function dispositivoId(){ let d = lsGet('iv_dev'); if(!d){ d = uid(); lsSet('iv_dev', d); } return d; }
+function bdLocalIds(){ try{ return JSON.parse(lsGet('iv_borradores')||'[]'); }catch(e){ return []; } }
+function borradorGuardarAhora(){
+  const t = trabajoActual;
+  if(!t || !sesionActiva || !trabajoSucio()) return;
+  if(!t._borradorId) t._borradorId = uid();
+  const json = JSON.stringify(t);
+  if(json===_autoUltimo) return;
+  _autoUltimo = json;
+  const doc = {id:t._borradorId, dispositivo:dispositivoId(), actualizado:new Date().toISOString(), trabajoJson:json};
+  try{
+    localStorage.setItem('iv_bd_'+doc.id, JSON.stringify(doc));
+    const ids = bdLocalIds(); if(!ids.includes(doc.id)){ ids.push(doc.id); localStorage.setItem('iv_borradores', JSON.stringify(ids)); }
+  }catch(e){}
+  try{ db.collection('borradores').doc(doc.id).set(doc).catch(function(err){ console.warn('Borrador no subido', err); }); }catch(e){}
+}
+function autoguardarBorrador(){
+  if(!trabajoActual || !sesionActiva) return;
+  if(trabajoActual!==_snapRef){ _snapRef = trabajoActual; _snapStr = JSON.stringify(trabajoActual); }
+  clearTimeout(_autoTimer);
+  _autoTimer = setTimeout(borradorGuardarAhora, 1000);
+}
+function borradorEliminar(id){
+  if(!id) return;
+  try{ localStorage.removeItem('iv_bd_'+id); const ids = bdLocalIds().filter(x=>x!==id); localStorage.setItem('iv_borradores', JSON.stringify(ids)); }catch(e){}
+  borradores = borradores.filter(b=>b.id!==id);
+  try{ db.collection('borradores').doc(id).delete().catch(function(){}); }catch(e){}
+}
+function borradoresPendientes(){
+  const m = {};
+  bdLocalIds().forEach(id=>{ try{ const d = JSON.parse(localStorage.getItem('iv_bd_'+id)||'null'); if(d) m[d.id]=d; }catch(e){} });
+  borradores.forEach(b=>{ if(!m[b.id] || (b.actualizado||'')>(m[b.id].actualizado||'')) m[b.id]=b; });
+  const actual = trabajoActual && trabajoActual._borradorId;
+  return Object.values(m).filter(b=>b.id!==actual).sort((a,b)=>(b.actualizado||'').localeCompare(a.actualizado||''));
+}
+function borradorRecuperar(id){
+  const b = borradoresPendientes().find(x=>x.id===id); if(!b) return;
+  let t; try{ t = JSON.parse(b.trabajoJson); }catch(e){ showToast('No se pudo leer el borrador'); return; }
+  t._borradorId = b.id;
+  trabajoActual = t;
+  clienteContexto = t.clienteId || null; clienteEstablecimientoContexto = t.establecimientoId || null;
+  _snapRef = trabajoActual; _snapStr = '';
+  const prefix = especiePrefix();
+  navigate(prefix==='mascota' ? 'mascotaCategorias' : prefix+'Categorias');
+}
+function borradorDescartar(id){
+  if(!confirm('¿Descartar este trabajo sin terminar? Se pierde lo cargado.')) return;
+  borradorEliminar(id); render();
+}
+function borradoresHomeHTML(){
+  const l = borradoresPendientes();
+  if(!l.length) return '';
+  return `<div class="sectiontitle">Trabajos sin terminar (autoguardados)</div>` + l.map(b=>{
+    let t = {}; try{ t = JSON.parse(b.trabajoJson); }catch(e){}
+    const c = t.clienteId ? clienteById(t.clienteId) : null;
+    const estab = establecimientoNombreDe(t.clienteId, t.establecimientoId);
+    const hora = b.actualizado ? new Date(b.actualizado).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div class="alertcard"><b>${emojiEspecie(t.especie)} ${escapeHtml(t.especie||'')}</b> — ${c?escapeHtml(clienteNombreCompleto(c)):'Sin cliente'}${estab?' · '+escapeHtml(estab):''}<br>
+      <span style="font-size:12px;">Último cambio: ${hora}${b.dispositivo!==dispositivoId()?' · otro dispositivo':''}</span>
+      <div class="twobtn" style="margin-top:8px;"><button class="btn btn-teal" style="margin-top:0; padding:6px 12px; font-size:13px;" onclick="borradorRecuperar('${b.id}')">Recuperar</button>
+      <button class="btn btn-danger" style="margin-top:0; padding:6px 12px; font-size:13px;" onclick="borradorDescartar('${b.id}')">Descartar</button></div></div>`;
+  }).join('');
+}
+// Aviso al salir: si hay algo cargado sin guardar, pregunta antes de salir
+function preguntarSalida(destinoFn){
+  if(!trabajoSucio()){ if(trabajoActual) borradorEliminar(trabajoActual._borradorId); trabajoActual = null; destinoFn(); return; }
+  borradorGuardarAhora();
+  window._salidaDestino = destinoFn;
+  const ov = document.createElement('div');
+  ov.id = 'salidaOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px;';
+  ov.innerHTML = `<div style="background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; max-width:420px; width:100%;">
+    <div class="sectiontitle" style="margin-top:0;">¿Salir de este trabajo?</div>
+    <div class="fieldnote" style="margin-bottom:12px;">Tenés datos cargados que todavía no guardaste como informe. Quedó un borrador automático, pero elegí qué querés hacer.</div>
+    <button class="btn btn-teal" onclick="salidaSeguir()">Seguir cargando</button>
+    <button class="btn btn-amber" onclick="salidaGuardarParcial()">Guardar como parcial y salir</button>
+    <button class="btn btn-danger" onclick="salidaSinGuardar()">Salir sin guardar</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function salidaCerrar(){ const o = document.getElementById('salidaOverlay'); if(o) o.remove(); }
+function salidaSeguir(){ salidaCerrar(); window._salidaDestino = null; }
+function salidaGuardarParcial(){
+  salidaCerrar();
+  guardarTrabajoActual('parcial');
+  trabajoActual = null;
+  showToast('Guardado como informe parcial');
+  const f = window._salidaDestino; window._salidaDestino = null; if(f) f();
+}
+function salidaSinGuardar(){
+  if(!confirm('¿Seguro? Se pierde todo lo cargado en este trabajo.')) return;
+  salidaCerrar();
+  if(trabajoActual) borradorEliminar(trabajoActual._borradorId);
+  trabajoActual = null;
+  const f = window._salidaDestino; window._salidaDestino = null; if(f) f();
+}
+window.addEventListener('beforeunload', function(){ borradorGuardarAhora(); });
+document.addEventListener('visibilitychange', function(){ if(document.hidden) borradorGuardarAhora(); });
 
 // ================= EQUINO: DETALLE POR CATEGORÍA =================
 function viewEquinoCategoria(cat){
@@ -1484,9 +1601,10 @@ function muestraAgregarAnimalMasivoEquino(){
     edad: document.getElementById('muestra_masivo_edad').value.trim(),
   });
   render();
+  const _u = tm.masivo.animales[tm.masivo.animales.length-1];
   setTimeout(()=>{
     const el=document.getElementById('muestra_masivo_nombre'); if(el){ el.value=''; el.focus(); }
-    ['muestra_masivo_raza','muestra_masivo_pelaje','muestra_masivo_sexo','muestra_masivo_edad'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+    [['muestra_masivo_raza','raza'],['muestra_masivo_pelaje','pelaje'],['muestra_masivo_sexo','sexo'],['muestra_masivo_edad','edad']].forEach(([id,k])=>{ const e=document.getElementById(id); if(e) e.value=_u[k]||''; });
   }, 0);
 }
 function muestraQuitarAnimalMasivo(i){ muestraObjetoActual().masivo.animales.splice(i,1); render(); }
@@ -1511,7 +1629,6 @@ function muestraAgregarCaravanaMasivoBovino(){
   const val = input ? input.value.trim() : '';
   if(!val) return;
   tm.masivo.animales.push({caravana: val, ...bovColorGet('muestraMasivo')});
-  bovColorReset('muestraMasivo');
   render();
   setTimeout(()=>{ const el=document.getElementById('muestra_masivo_caravana'); if(el){ el.value=''; el.focus(); } }, 0);
 }
@@ -1939,7 +2056,7 @@ function renderTubosList(){
       ${window._tubosTmp.length>1 ? `<button class="removeanimal" onclick="quitarTubo(${i})">✕</button>` : ''}
     </div>`).join('');
 }
-function agregarTubo(){ window._tubosTmp.push({nombre:'',edad:'',pelaje:'',sexo:''}); renderTubosList(); }
+function agregarTubo(){ const u = window._tubosTmp[window._tubosTmp.length-1]||{}; window._tubosTmp.push({nombre:'',edad:u.edad||'',pelaje:u.pelaje||'',sexo:u.sexo||''}); renderTubosList(); }
 function quitarTubo(i){ window._tubosTmp.splice(i,1); renderTubosList(); }
 function guardarSangradoMasivo(){
   if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios = {};
@@ -2385,9 +2502,10 @@ function seMasivoAgregarAnimal(){
     edad: document.getElementById('se_masivo_edad').value.trim(),
   });
   render();
+  const _u = se.animalesIndividuales[se.animalesIndividuales.length-1];
   setTimeout(()=>{
     const el=document.getElementById('se_masivo_nombre'); if(el){ el.value=''; el.focus(); }
-    ['se_masivo_raza','se_masivo_pelaje','se_masivo_sexo','se_masivo_edad'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+    [['se_masivo_raza','raza'],['se_masivo_pelaje','pelaje'],['se_masivo_sexo','sexo'],['se_masivo_edad','edad']].forEach(([id,k])=>{ const e=document.getElementById(id); if(e) e.value=_u[k]||''; });
   }, 0);
 }
 function seMasivoQuitarAnimal(i){ trabajoActual.sanidadEquino.animalesIndividuales.splice(i,1); render(); }
@@ -2508,7 +2626,7 @@ function renderSanidadFilas(){
       ${window._sanidadFilasTmp.length>1 ? `<button class="removeanimal" onclick="quitarFilaSanidad(${i})">✕</button>` : ''}
     </div>`).join('');
 }
-function agregarFilaSanidad(){ window._sanidadFilasTmp.push({tipoVacuna:'',nombre:'',edad:'',pelaje:'',sexo:''}); renderSanidadFilas(); }
+function agregarFilaSanidad(){ const u = window._sanidadFilasTmp[window._sanidadFilasTmp.length-1]||{}; window._sanidadFilasTmp.push({tipoVacuna:'',nombre:'',edad:u.edad||'',pelaje:u.pelaje||'',sexo:u.sexo||''}); renderSanidadFilas(); }
 function quitarFilaSanidad(i){ window._sanidadFilasTmp.splice(i,1); renderSanidadFilas(); }
 function guardarSanidadMasiva(){
   if(!trabajoActual.sanidad) trabajoActual.sanidad = {};
@@ -2629,7 +2747,7 @@ function guardarNutricionMascota(estado){
 }
 const NUTRI_CATEGORIAS = ['Toro','Vaca','Vaquillona','Novillo','MEJ','Ternero','Ternera'];
 let nutriBovSub = null;
-window._pesoTmp = {caravana:'', categoria:null, peso:'', cc:null};
+window._pesoTmp = {caravana:'', categoria:null, peso:'', cc:null, idTipo:null};
 function fmtNum(n, dec){ return (Math.round(n*Math.pow(10,dec))/Math.pow(10,dec)).toString().replace('.',','); }
 function pesadasHistorial(caravana){
   const t = trabajoActual, out = [];
@@ -2654,26 +2772,26 @@ function agregarPesada(){
   if(!car){ showToast('Falta la caravana'); return; }
   if(!d.categoria){ showToast('Elegí la categoría'); return; }
   if(!(peso>0)){ showToast('Falta el peso'); return; }
-  const hoy = hoyISO();
-  const h = pesadasHistorial(car).filter(x=>x.fecha<hoy);
-  const rec = {caravana:car, categoria:d.categoria, peso, fecha:hoy};
+  const ei = edIdx('pesos'), previo = ei!==null ? regsDe('pesos')[ei] : null;
+  const fecha = previo ? previo.fecha : hoyISO();
+  const h = pesadasHistorial(car).filter(x=>x.fecha<fecha);
+  const rec = {caravana:car, categoria:d.categoria, peso, fecha};
+  if(d.idTipo==='fuego') rec.idTipo = 'fuego';
   if(d.cc) rec.cc = d.cc;
   if(h.length){
     const prev = h[h.length-1], first = h[0];
-    const dias = Math.round((new Date(hoy)-new Date(prev.fecha))/86400000);
+    const dias = Math.round((new Date(fecha)-new Date(prev.fecha))/86400000);
     rec.prevPeso = prev.peso; rec.prevFecha = prev.fecha;
     if(dias>0) rec.gdp = (peso-prev.peso)/dias;
-    const diasAc = Math.round((new Date(hoy)-new Date(first.fecha))/86400000);
+    const diasAc = Math.round((new Date(fecha)-new Date(first.fecha))/86400000);
     if(h.length>1 && diasAc>0){ rec.gdpAcum = (peso-first.peso)/diasAc; rec.primerFecha = first.fecha; rec.primerPeso = first.peso; }
   }
-  if(!trabajoActual.nutricion) trabajoActual.nutricion = {texto:'', fotos:[]};
-  if(!trabajoActual.nutricion.pesadas) trabajoActual.nutricion.pesadas = [];
-  trabajoActual.nutricion.pesadas.push(rec);
-  window._pesoTmp = {caravana:'', categoria:null, peso:'', cc:null};
-  showToast('Peso guardado');
+  regGuardar('pesos', rec);
+  defSet('pesos', {categoria:d.categoria, idTipo:d.idTipo}, CAMPOS_DEF_BOV);
+  window._pesoTmp = tmpFresh('pesos');
+  showToast(previo ? 'Cambios guardados' : 'Peso guardado');
   render();
 }
-function quitarPesada(i){ if(!confirm('¿Eliminar esta pesada?')) return; trabajoActual.nutricion.pesadas.splice(i,1); render(); }
 function pesadaTexto(p){
   let o = `${fmtNum(p.peso,1)} kg`;
   if(p.cc) o += `, CC ${p.cc}`;
@@ -2707,8 +2825,10 @@ function catNutricionBovino(){
     return `
       <button class="backbtn" onclick="nutriBovSub=null; render()">‹ Nutrición</button>
       <div class="sectiontitle">Control de pesos (${lista.length} cargados)</div>
-      <label>Identificación (caravana)</label>
-      <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._pesoTmp.caravana=this.value; pesoHintActualizar()" placeholder="N° de caravana">
+      ${edBanner('pesos')}
+      <div class="sectiontitle">Identificación</div>
+      <div class="optrow"><div class="optbtn ${d.idTipo!=='fuego'?'selected':''}" onclick="window._pesoTmp.idTipo=null; render()">Caravana</div><div class="optbtn ${d.idTipo==='fuego'?'selected':''}" onclick="window._pesoTmp.idTipo='fuego'; render()">Marca a fuego</div></div>
+      <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._pesoTmp.caravana=this.value; pesoHintActualizar()" placeholder="${d.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
       <div class="fieldnote" id="peso_hint">${escapeHtml(pesoHintHTML(d.caravana.trim()))}</div>
       <div class="sectiontitle">Categoría</div>
       <div class="optrow" style="flex-wrap:wrap;">${NUTRI_CATEGORIAS.map(c=>`<div class="optbtn ${d.categoria===c?'selected':''}" onclick="pesoSetCat('${c}')">${c}</div>`).join('')}</div>
@@ -2716,13 +2836,9 @@ function catNutricionBovino(){
       <input type="number" inputmode="decimal" step="0.1" value="${escapeHtml(String(d.peso))}" oninput="window._pesoTmp.peso=this.value" placeholder="Ej: 345">
       <div class="sectiontitle">Condición corporal (opcional)</div>
       <div class="optrow">${[1,2,3,4,5].map(c=>`<div class="optbtn ${d.cc===c?'selected':''}" onclick="pesoSetCC(${c})">${c}</div>`).join('')}</div>
-      <button class="btn btn-green" style="margin-top:12px;" onclick="agregarPesada()">+ Agregar y siguiente animal</button>
-      ${lista.length ? `<div class="sectiontitle">Cargados</div>${lista.map((p,i)=>`
-        <div class="listcard" style="cursor:default;">
-          <div class="meta"><b>Caravana ${escapeHtml(p.caravana)}</b> · ${escapeHtml(p.categoria||'')} ${btnEditarIdent(p.caravana)}</div>
-          <div class="meta">${escapeHtml(pesadaTexto(p))}</div>
-          <button class="removeanimal" onclick="quitarPesada(${i})">✕</button>
-        </div>`).join('')}
+      <button class="btn btn-green" style="margin-top:12px;" onclick="agregarPesada()">${edIdx('pesos')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
+      ${listaAnimalesCtx('pesos')}
+      ${lista.length ? `
         <div class="sectiontitle">Próximo control de pesos (opcional)</div>
         <input type="date" id="peso_prox" value="${(n.proximoControl&&n.proximoControl.fecha)||''}">
         <button class="btn btn-teal" onclick="cargarProximoPesaje()">📅 Cargar próxima fecha de control</button>
@@ -2900,7 +3016,7 @@ function guardarReproductivaBovinoFinal(estado){
 const BOV_COLORES = ['Blanco','Rojo','Azul','Celeste','Amarillo','Verde','Otro'];
 const BOV_APLICACIONES = ['Bullsynch','Vacuna reproductiva','Vedevax','Prostaglandina','Benzoato de estradiol','Dispositivo','Folirec','GnRH','Buserelina','Minerales','Observaciones'];
 const BOV_CATS_REPRO = ['Vaca','Vaquillona'];
-function bovExtrasVacios(){ return {categoria:null, color:null, colorOtro:'', cc:null, aplicaciones:[], aplicOtra:''}; }
+function bovExtrasVacios(){ return {idTipo:null, categoria:null, color:null, colorOtro:'', cc:null, aplicaciones:[], aplicOtra:''}; }
 function bovSetCat(tmp, v){ const d=window[tmp]; d.categoria = (d.categoria===v ? null : v); render(); }
 function bovCatSel(tmp){
   const d = bovExtrasAsegurar(tmp);
@@ -2988,7 +3104,7 @@ function renderFilasColor(arrName){
 }
 
 function subDiagnosticoGestacion(r){
-  if(!window._diagTmp) window._diagTmp = {caravana:'', resultado:null, subresultado:null, otro:'', ...bovExtrasVacios()};
+  if(!window._diagTmp) window._diagTmp = tmpFresh('diag');
   const d = window._diagTmp;
   const regs = r.diagnosticoGestacion.registros;
   const prenadas = regs.filter(x=>x.resultado==='Preñada').length;
@@ -3005,9 +3121,9 @@ function subDiagnosticoGestacion(r){
       <div class="statcard"><div class="num">${vacias}</div><div class="lab">vacías</div></div>
     </div>
     ${prenadas ? `<div class="fieldnote" style="margin-bottom:12px;">De las preñadas: Cabeza ${cab} · Cuerpo ${cue} · Cola ${col}</div>` : ''}
+    ${edBanner('diag')}
     ${bovCatSel('_diagTmp')}
-    <label>Caravana</label>
-    <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._diagTmp.caravana=this.value" placeholder="N° de caravana">
+    ${bovIdInput('_diagTmp')}
     ${bovExtrasTop('_diagTmp')}
     <div class="sectiontitle">Resultado</div>
     <div class="optrow">
@@ -3020,8 +3136,8 @@ function subDiagnosticoGestacion(r){
     <label>Otro (opcional)</label>
     <input type="text" value="${escapeHtml(d.otro)}" oninput="window._diagTmp.otro=this.value" placeholder="Algún detalle extra">
     ${bovExtrasAplic('_diagTmp')}
-    <button class="btn btn-green" onclick="agregarDiagRegistro()">+ Agregar y siguiente animal</button>
-    ${listaCargadosIdent(regs, x=>(x.resultado||'')+(x.subresultado?' ('+x.subresultado+')':''))}
+    <button class="btn btn-green" onclick="agregarDiagRegistro()">${edIdx('diag')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
+    ${listaAnimalesCtx('diag')}
     <label style="margin-top:22px;">Comentario general</label>
     <textarea id="dg_comentario" placeholder="Ej: examen hecho por ultrasonografía...">${escapeHtml(r.diagnosticoGestacion.comentario||'')}</textarea>
     ${botonGuardarSimple('guardarDiagGestacionFinal')}
@@ -3032,8 +3148,11 @@ function agregarDiagRegistro(){
   const d = window._diagTmp;
   if(!d.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
   if(!d.caravana || !d.resultado){ showToast('Falta caravana o resultado'); return; }
-  trabajoActual.exploracionReproductiva.diagnosticoGestacion.registros.push({...d});
-  window._diagTmp = {caravana:'', resultado:null, subresultado:null, otro:'', ...bovExtrasVacios()};
+  const _er = edIdx('diag')!==null;
+  regGuardar('diag', {...d, caravana:d.caravana.trim()});
+  defSet('diag', d, CAMPOS_DEF_BOV);
+  window._diagTmp = tmpFresh('diag');
+  if(_er) showToast('Cambios guardados');
   render();
 }
 function guardarDiagGestacionFinal(estado){
@@ -3042,15 +3161,15 @@ function guardarDiagGestacionFinal(estado){
 }
 
 function subPreservicio(r){
-  if(!window._presTmp) window._presTmp = {caravana:'', gdr:null, destino:null, destinoOtro:'', ...bovExtrasVacios()};
+  if(!window._presTmp) window._presTmp = tmpFresh('pres');
   const p = window._presTmp;
   const regs = r.preservicio.registros;
   return `
     <button class="backbtn" onclick="bovinoReproSub=null; render()">‹ Exploración reproductiva</button>
     <div class="sectiontitle">Preservicio (${regs.length} cargados)</div>
+    ${edBanner('pres')}
     ${bovCatSel('_presTmp')}
-    <label>Caravana</label>
-    <input type="text" value="${escapeHtml(p.caravana)}" oninput="window._presTmp.caravana=this.value" placeholder="N° de caravana">
+    ${bovIdInput('_presTmp')}
     ${bovExtrasTop('_presTmp')}
     <div class="sectiontitle">GDR (Grado de Desarrollo Reproductivo)</div>
     <div class="optrow">
@@ -3062,8 +3181,8 @@ function subPreservicio(r){
     </div>
     ${p.destino==='Otro' ? `<input type="text" value="${escapeHtml(p.destinoOtro||'')}" oninput="window._presTmp.destinoOtro=this.value" placeholder="¿Cuál destino?">` : ''}
     ${bovExtrasAplic('_presTmp')}
-    <button class="btn btn-green" onclick="agregarPresRegistro()">+ Agregar y siguiente animal</button>
-    ${listaCargadosIdent(regs, x=>'GDR '+(x.gdr||'—')+', '+(((x.destino==='Otro')?(x.destinoOtro||'Otro'):x.destino)||'—'))}
+    <button class="btn btn-green" onclick="agregarPresRegistro()">${edIdx('pres')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
+    ${listaAnimalesCtx('pres')}
     ${botonGuardarSimple('guardarPreservicioFinal')}
   `;
 }
@@ -3071,8 +3190,11 @@ function agregarPresRegistro(){
   const p = window._presTmp;
   if(!p.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
   if(!p.caravana || !p.gdr || !p.destino){ showToast('Completá caravana, GDR y destino'); return; }
-  trabajoActual.exploracionReproductiva.preservicio.registros.push({...p});
-  window._presTmp = {caravana:'', gdr:null, destino:null, destinoOtro:'', ...bovExtrasVacios()};
+  const _er = edIdx('pres')!==null;
+  regGuardar('pres', {...p, caravana:p.caravana.trim()});
+  defSet('pres', p, CAMPOS_DEF_BOV);
+  window._presTmp = tmpFresh('pres');
+  if(_er) showToast('Cambios guardados');
   render();
 }
 function guardarPreservicioFinal(estado){ finalizarGuardado(estado); }
@@ -3129,6 +3251,122 @@ function corregirIdent(clave, viejo){
   render();
 }
 function corregirCaravana(viejo){ corregirIdent('caravana', viejo); }
+
+// ---- Predeterminados por pantalla (se guardan dentro del trabajo) ----
+const CAMPOS_DEF_BOV = ['categoria','color','colorOtro','idTipo'];
+function defGet(ctx){ const t = trabajoActual; return (t && t._def && t._def[ctx]) ? t._def[ctx] : {}; }
+function defSet(ctx, obj, campos){
+  const t = trabajoActual; if(!t) return;
+  if(!t._def) t._def = {};
+  const d = t._def[ctx] = t._def[ctx] || {};
+  campos.forEach(c=>{ if(obj[c]) d[c] = obj[c]; else delete d[c]; });
+}
+function idTxt(x){ return String(x.caravana||'—') + (x.idTipo==='fuego' ? ' (fuego)' : ''); }
+function bovSetIdTipo(tmp, v){ const d = window[tmp]; d.idTipo = (v==='fuego') ? 'fuego' : null; render(); }
+function bovIdInput(tmp, extraOninput){
+  const d = bovExtrasAsegurar(tmp);
+  return `<div class="sectiontitle">Identificación</div>
+    <div class="optrow"><div class="optbtn ${d.idTipo!=='fuego'?'selected':''}" onclick="bovSetIdTipo('${tmp}','caravana')">Caravana</div><div class="optbtn ${d.idTipo==='fuego'?'selected':''}" onclick="bovSetIdTipo('${tmp}','fuego')">Marca a fuego</div></div>
+    <input type="text" value="${escapeHtml(d.caravana||'')}" oninput="window['${tmp}'].caravana=this.value${extraOninput||''}" placeholder="${d.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">`;
+}
+// selector caravana / marca a fuego sin re-render (para pantallas con campos de texto sin estado)
+window._idt = {};
+function idTipoWidget(key){
+  const v = window._idt[key] || null;
+  return `<div class="optrow" style="margin-top:4px;"><div class="optbtn ${v!=='fuego'?'selected':''}" onclick="idTipoPick(this,'${key}',null)">Caravana</div><div class="optbtn ${v==='fuego'?'selected':''}" onclick="idTipoPick(this,'${key}','fuego')">Marca a fuego</div></div>`;
+}
+function idTipoPick(el, key, v){ window._idt[key] = v; el.parentElement.querySelectorAll('.optbtn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
+// ---- Registros por contexto, edición y lista de animales cargados ----
+window._ed = {}; window._fichaAb = {};
+const TMP_DE = {diag:'_diagTmp', pres:'_presTmp', gin:'_ginTmp', iatf:'_iatfTmp'};
+function regsDe(ctx){
+  const t = trabajoActual, r = t.exploracionReproductiva;
+  if(ctx==='diag') return r.diagnosticoGestacion.registros;
+  if(ctx==='pres') return r.preservicio.registros;
+  if(ctx==='gin') return r.examenGinecologico.registros;
+  if(ctx==='iatf') return r.servicio.iatf;
+  if(ctx==='pesos'){ if(!t.nutricion) t.nutricion = {texto:'', fotos:[]}; if(!t.nutricion.pesadas) t.nutricion.pesadas = []; return t.nutricion.pesadas; }
+  return [];
+}
+function tmpFresh(ctx){
+  const d = defGet(ctx), pick = {};
+  CAMPOS_DEF_BOV.forEach(k=>{ if(d[k]) pick[k] = d[k]; });
+  if(ctx==='diag') return {caravana:'', resultado:null, subresultado:null, otro:'', ...bovExtrasVacios(), ...pick};
+  if(ctx==='pres') return {caravana:'', gdr:null, destino:null, destinoOtro:'', ...bovExtrasVacios(), ...pick};
+  if(ctx==='gin') return {caravana:'', texto:'', ...bovExtrasVacios(), ...pick};
+  if(ctx==='iatf') return {caravana:'', conDispositivo:null, pintada:null, toro: lsGet('iv_toro'), ...bovExtrasVacios(), ...pick};
+  if(ctx==='pesos') return {caravana:'', categoria:pick.categoria||null, peso:'', cc:null, idTipo:pick.idTipo||null};
+  return {};
+}
+function edIdx(ctx){ const i = window._ed[ctx]; return (i!==undefined && i!==null && trabajoActual && i<regsDe(ctx).length) ? i : null; }
+function regEditar(ctx, i){
+  const c = JSON.parse(JSON.stringify(regsDe(ctx)[i]));
+  window._ed[ctx] = i;
+  if(ctx==='pesos') window._pesoTmp = {caravana:c.caravana, categoria:c.categoria||null, peso:String(c.peso), cc:c.cc||null, idTipo:c.idTipo||null};
+  else window[TMP_DE[ctx]] = {...bovExtrasVacios(), ...c};
+  if(ctx==='iatf'){ iatfPaso = c.etapa; iatfSel = c.caravana; window._iatfTmp.toro = c.toro || ''; window._vetTmp['iatf'] = c.vet || ''; }
+  render(); window.scrollTo(0,0);
+}
+function edCancelar(ctx){
+  window._ed[ctx] = null;
+  if(ctx==='pesos') window._pesoTmp = tmpFresh('pesos'); else window[TMP_DE[ctx]] = tmpFresh(ctx);
+  if(ctx==='iatf'){ delete window._vetTmp['iatf']; if(iatfPaso!=='colocacion'){ iatfSel = null; iatfBusq = ''; } }
+  render();
+}
+function edBanner(ctx, tmp){
+  const i = edIdx(ctx); if(i===null) return '';
+  const x = regsDe(ctx)[i];
+  return `<div class="alertcard">✏️ Editando <b>${escapeHtml(idTxt(x))}</b> — los cambios reemplazan lo cargado.<br><button class="btn btn-outline" style="margin-top:8px; padding:6px 12px; font-size:13px;" onclick="edCancelar('${ctx}')">Cancelar edición</button></div>`;
+}
+function regQuitar(ctx, i){
+  if(!confirm('¿Quitar este animal de la lista?')) return;
+  regsDe(ctx).splice(i,1); window._ed[ctx] = null; render();
+}
+function regGuardar(ctx, rec){
+  const regs = regsDe(ctx), i = edIdx(ctx);
+  if(i!==null) regs[i] = rec; else regs.push(rec);
+  window._ed[ctx] = null;
+}
+function aplicTxt(x){
+  return (x.aplicaciones||[]).map(a=> (a==='Otra'||a==='Observaciones') ? (x.aplicOtra ? 'Observaciones: '+x.aplicOtra : 'Observaciones') : a).join(', ');
+}
+function detalleLineasReg(ctx, x){
+  const L = [], add = (k,v)=>{ if(v!==undefined && v!==null && v!=='') L.push(k+': '+v); };
+  add('Identificación', idTxt(x)); add('Categoría', x.categoria);
+  if(ctx==='diag'){ add('Resultado', (x.resultado||'')+(x.subresultado?' ('+x.subresultado+')':'')); add('Otro', x.otro); }
+  if(ctx==='pres'){ add('GDR', x.gdr); add('Destino', (x.destino==='Otro'||x.destino==='Otra') ? (x.destinoOtro||'Otro') : x.destino); }
+  if(ctx==='gin') add('Observación', x.texto);
+  if(ctx==='iatf'){ add('Paso', IATF_PASOS[x.etapa]); add('Fecha', fmtFecha(x.fecha)); add('Retiro', x.conDispositivo); add('Celo', x.pintada); add('Toro', x.toro); }
+  if(ctx==='pesos'){ add('Peso', fmtNum(x.peso,1)+' kg'); if(x.prevPeso!==undefined) add('Anterior', fmtNum(x.prevPeso,1)+' kg ('+fmtFecha(x.prevFecha)+')'); if(x.gdp!==undefined) add('Ganancia diaria', fmtNum(x.gdp,2)+' kg/día'); }
+  add('Color', bovColorTxt(x)); if(ctx!=='pesos' || x.cc) add('Condición corporal', x.cc); add('Aplicaciones', aplicTxt(x)); add('Veterinario actuante', x.vet);
+  return L;
+}
+function resumenCortoReg(ctx, x){
+  if(ctx==='diag') return (x.resultado||'')+(x.subresultado?' ('+x.subresultado+')':'');
+  if(ctx==='pres') return 'GDR '+(x.gdr||'—')+' · '+(((x.destino==='Otro'||x.destino==='Otra')?(x.destinoOtro||'Otro'):x.destino)||'—');
+  if(ctx==='gin') return (x.texto||'').slice(0,30);
+  if(ctx==='iatf') return IATF_PASOS[x.etapa]||'';
+  if(ctx==='pesos') return fmtNum(x.peso,1)+' kg';
+  return '';
+}
+function toggleFicha(k){ window._fichaAb[k] = !window._fichaAb[k]; const el = document.getElementById('fic_'+k); if(el) el.style.display = window._fichaAb[k] ? '' : 'none'; }
+function listaAnimalesCtx(ctx, filtro, titulo){
+  const regs = regsDe(ctx);
+  const items = regs.map((x,i)=>({x,i})).filter(o=>!filtro || filtro(o.x)).reverse();
+  if(!items.length) return '';
+  return `<div class="sectiontitle">${titulo||'Cargados'} (${items.length})</div>` + items.map(o=>{
+    const k = ctx+'_'+o.i, ab = !!window._fichaAb[k], editable = !(ctx==='iatf' && !o.x.etapa);
+    return `<div class="listcard" style="cursor:pointer;" onclick="toggleFicha('${k}')">
+      <div class="meta"><b>${escapeHtml(idTxt(o.x))}</b>${o.x.categoria?' · '+escapeHtml(o.x.categoria):''}${resumenCortoReg(ctx,o.x)?' · '+escapeHtml(resumenCortoReg(ctx,o.x)):''}<span style="float:right;">▾</span></div>
+      <div id="fic_${k}" style="display:${ab?'':'none'}; margin-top:8px;">
+        ${detalleLineasReg(ctx,o.x).map(l=>`<div class="meta">${escapeHtml(l)}</div>`).join('')}
+        <div class="twobtn" style="margin-top:8px;">
+          ${editable?`<button class="btn btn-teal" style="margin-top:0; padding:6px 12px; font-size:13px;" onclick="event.stopPropagation(); regEditar('${ctx}',${o.i})">✏️ Editar</button>`:''}
+          <button class="btn btn-danger" style="margin-top:0; padding:6px 12px; font-size:13px;" onclick="event.stopPropagation(); regQuitar('${ctx}',${o.i})">✕ Quitar</button>
+        </div>
+      </div></div>`;
+  }).join('');
+}
 
 // ===== IATF en 3 pasos: colocación → retiro → inseminación =====
 let iatfPaso = null, iatfSel = null, iatfBusq = '';
@@ -3196,13 +3434,11 @@ function iatfListaHTML(){
       <div class="meta">${txt} el ${fmtFecha(r.fecha)}</div></div>`).join('');
 }
 function iatfFiltrar(v){ iatfBusq = v; const c = document.getElementById('iatf_lista'); if(c) c.innerHTML = iatfListaHTML(); }
-function iatfTmpNuevo(){
-  return {caravana:'', conDispositivo:null, pintada:null, toro: lsGet('iv_toro'), ...bovExtrasVacios()};
-}
+function iatfTmpNuevo(){ return tmpFresh('iatf'); }
 function iatfIrPaso(p){ iatfPaso = p; iatfSel = null; iatfBusq = ''; window._iatfTmp = iatfTmpNuevo(); render(); }
 function iatfElegir(car){
   const r = iatfContexto().filter(x=>String(x.caravana)===car).pop() || {};
-  window._iatfTmp = {...iatfTmpNuevo(), caravana:car, categoria:r.categoria||null, color:r.color||null, colorOtro:r.colorOtro||''};
+  window._iatfTmp = {...iatfTmpNuevo(), caravana:car, categoria:r.categoria||null, color:r.color||null, colorOtro:r.colorOtro||'', idTipo:r.idTipo||null};
   iatfSel = car; render();
 }
 function iatfAgregarNuevo(){ window._iatfTmp = iatfTmpNuevo(); iatfSel = ''; render(); }
@@ -3242,11 +3478,7 @@ function subServicioIatf(r){
   const it = window._iatfTmp;
   const cargados = lista.filter(x=>x.etapa===iatfPaso);
   const titulo = IATF_PASOS[iatfPaso];
-  const listaCargados = cargados.length ? `<div class="sectiontitle">Cargados hoy en este trabajo</div>${cargados.map(x=>`
-      <div class="listcard" style="cursor:default;">
-        <div class="meta"><b>Caravana ${escapeHtml(x.caravana)}</b> · ${fmtFecha(x.fecha)} <span style="float:right; cursor:pointer;" onclick="corregirCaravana(${JSON.stringify(String(x.caravana)).replace(/"/g,'&quot;')})">✎</span></div>
-        <div class="meta">${escapeHtml(iatfDetalle(x))}</div>
-      </div>`).join('')}` : '';
+  const listaCargados = listaAnimalesCtx('iatf', x=>x.etapa===iatfPaso, 'Cargados en este paso');
   // búsqueda + lista (retiro e inseminación)
   if((iatfPaso==='retiro'||iatfPaso==='inseminacion') && iatfSel===null){
     return `
@@ -3276,14 +3508,14 @@ function subServicioIatf(r){
   return `
     ${botonAtras}
     <div class="sectiontitle">${titulo} (${cargados.length} cargados)</div>
+    ${edBanner('iatf')}
     ${bovCatSel('_iatfTmp')}
-    <label>Caravana</label>
-    <input type="text" value="${escapeHtml(it.caravana)}" oninput="window._iatfTmp.caravana=this.value" placeholder="N° de caravana">
+    ${bovIdInput('_iatfTmp')}
     ${campos}
     ${bovExtrasTop('_iatfTmp')}
     ${bovExtrasAplic('_iatfTmp')}
     ${vetWidget('iatf')}
-    <button class="btn btn-green" style="margin-top:10px;" onclick="agregarIatfRegistro()">${iatfPaso==='colocacion'?'+ Agregar y siguiente animal':'Guardar y volver a buscar'}</button>
+    <button class="btn btn-green" style="margin-top:10px;" onclick="agregarIatfRegistro()">${edIdx('iatf')!==null?'Guardar cambios':(iatfPaso==='colocacion'?'+ Agregar y siguiente animal':'Guardar y volver a buscar')}</button>
     ${listaCargados}
     ${iatfPaso==='colocacion' && cargados.length ? `
       <div class="sectiontitle">Fecha de retiro (opcional)</div>
@@ -3305,15 +3537,19 @@ function agregarIatfRegistro(){
   const it = window._iatfTmp;
   if(!it.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
   if(!it.caravana || !it.caravana.trim()){ showToast('Falta la caravana'); return; }
-  const rec = {etapa:iatfPaso, fecha:hoyISO(), caravana:it.caravana.trim(), categoria:it.categoria, color:it.color, colorOtro:it.colorOtro, cc:it.cc, aplicaciones:it.aplicaciones, aplicOtra:it.aplicOtra};
-  if(iatfPaso==='retiro' && it.conDispositivo) rec.conDispositivo = it.conDispositivo;
-  if(iatfPaso==='inseminacion'){ if(it.pintada) rec.pintada = it.pintada; if(it.toro){ rec.toro = it.toro; lsSet('iv_toro', it.toro); } }
-  const v = vetLeer('iatf'); if(v) rec.vet = v;
-  trabajoActual.exploracionReproductiva.servicio.iatf.push(rec);
-  if(iatfPaso==='retiro') eventoAgrupado('iatf-ia', sumarDias(rec.fecha,2), 'Inseminación IATF (retiro + 48 hs)');
+  const ei = edIdx('iatf'), previo = ei!==null ? regsDe('iatf')[ei] : null;
+  const rec = {...(previo||{}), etapa: previo ? previo.etapa : iatfPaso, fecha: previo ? previo.fecha : hoyISO(), caravana:it.caravana.trim(), categoria:it.categoria, color:it.color, colorOtro:it.colorOtro, cc:it.cc, aplicaciones:it.aplicaciones, aplicOtra:it.aplicOtra};
+  if(it.idTipo==='fuego') rec.idTipo = 'fuego'; else delete rec.idTipo;
+  const paso = rec.etapa;
+  if(paso==='retiro'){ if(it.conDispositivo) rec.conDispositivo = it.conDispositivo; else delete rec.conDispositivo; }
+  if(paso==='inseminacion'){ if(it.pintada) rec.pintada = it.pintada; else delete rec.pintada; if(it.toro){ rec.toro = it.toro; lsSet('iv_toro', it.toro); } else delete rec.toro; }
+  const v = vetLeer('iatf'); if(v) rec.vet = v; else delete rec.vet;
+  regGuardar('iatf', rec);
+  defSet('iatf', it, CAMPOS_DEF_BOV);
+  if(!previo && paso==='retiro') eventoAgrupado('iatf-ia', sumarDias(rec.fecha,2), 'Inseminación IATF (retiro + 48 hs)');
   window._iatfTmp = iatfTmpNuevo();
-  if(iatfPaso!=='colocacion'){ iatfSel = null; iatfBusq = ''; }
-  showToast('Guardado');
+  if(paso!=='colocacion'){ iatfSel = null; iatfBusq = ''; }
+  showToast(previo ? 'Cambios guardados' : 'Guardado');
   render();
 }
 function cargarFechaRetiroIatf(){
@@ -3351,29 +3587,32 @@ function guardarServicioNatural(){
 function guardarServicioFinal(estado){ finalizarGuardado(estado); }
 
 function subExamenGinecologico(r){
-  if(!window._ginTmp) window._ginTmp = {caravana:'', texto:'', ...bovExtrasVacios()};
+  if(!window._ginTmp) window._ginTmp = tmpFresh('gin');
   const g = window._ginTmp;
   const lista = r.examenGinecologico.registros;
   return `
     <button class="backbtn" onclick="bovinoReproSub=null; render()">‹ Exploración reproductiva</button>
     <div class="sectiontitle">Examen ginecológico</div>
+    ${edBanner('gin')}
     ${bovCatSel('_ginTmp')}
-    <label>Caravana</label>
-    <input type="text" value="${escapeHtml(g.caravana)}" oninput="window._ginTmp.caravana=this.value">
+    ${bovIdInput('_ginTmp')}
     ${bovExtrasTop('_ginTmp')}
     <label>Observación</label>
     <textarea id="gin_texto" oninput="window._ginTmp.texto=this.value" placeholder="Lo que encontrás...">${escapeHtml(g.texto)}</textarea>
     ${bovExtrasAplic('_ginTmp')}
-    <button class="btn btn-outline" onclick="agregarGinRegistro()">+ Agregar</button>
-    ${lista.length ? lista.map(x=>`<div class="listcard" style="cursor:default; margin-top:10px;"><div class="meta"><b>Caravana ${escapeHtml(x.caravana)}</b>${escapeHtml(bovExtrasLinea(x))} ${btnEditarIdent(x.caravana)}</div><div class="meta">${escapeHtml(x.texto)}</div></div>`).join('') : ''}
+    <button class="btn btn-green" onclick="agregarGinRegistro()">${edIdx('gin')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
+    ${listaAnimalesCtx('gin')}
   `;
 }
 function agregarGinRegistro(){
   const g = window._ginTmp;
   if(!g.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
   if(!g.caravana){ showToast('Falta la caravana'); return; }
-  trabajoActual.exploracionReproductiva.examenGinecologico.registros.push({...g});
-  window._ginTmp = {caravana:'', texto:'', ...bovExtrasVacios()};
+  const _er = edIdx('gin')!==null;
+  regGuardar('gin', {...g, caravana:g.caravana.trim()});
+  defSet('gin', g, CAMPOS_DEF_BOV);
+  window._ginTmp = tmpFresh('gin');
+  if(_er) showToast('Cambios guardados');
   render();
 }
 
@@ -3396,24 +3635,76 @@ function androToros(t){
   (t.examenAndrologicoLista||[]).forEach(a=>{ if(hasData(a)) out.push(a); });
   return out;
 }
+const AN_DEF = ['raza','edad','color','colorOtro','idTipo'];
+function androVacio(a){ if(!a) return true; return !Object.keys(a).some(k=>!AN_DEF.includes(k) && hasData(a[k])); }
+function androFalta(a){ const f = []; if(!a.caravana || !String(a.caravana).trim()) f.push('la identificación'); if(!a.cc) f.push('la condición corporal'); return f; }
 function androNuevo(){
-  const l = androLista();
-  l.push({});
+  const l = androLista(), d = defGet('andro'), n = {};
+  AN_DEF.forEach(k=>{ if(d[k]) n[k] = d[k]; });
+  l.push(n);
   androIdx = l.length-1;
-  render();
+  render(); window.scrollTo(0,0);
 }
-function androAbrir(i){ androIdx = i; render(); }
+function androAbrir(i){ androIdx = i; render(); window.scrollTo(0,0); }
 function androVolverLista(){
-  const l = androLista();
-  // si el toro quedó completamente vacío, se descarta
-  if(androIdx!==null && l[androIdx] && !hasData(l[androIdx])) l.splice(androIdx,1);
+  const l = androLista(), a = androIdx!==null ? l[androIdx] : null;
+  if(a){
+    if(androVacio(a)) l.splice(androIdx,1);
+    else {
+      const f = androFalta(a);
+      if(f.length){ if(!confirm('Falta '+f.join(' y ')+'. ¿Descartar este toro?')) return; l.splice(androIdx,1); }
+      else defSet('andro', a, AN_DEF);
+    }
+  }
   androIdx = null;
   render();
+}
+function androGuardarSiguiente(){
+  const a = androLista()[androIdx];
+  const f = androFalta(a);
+  if(f.length){ showToast('Falta '+f.join(' y ')); return; }
+  defSet('andro', a, AN_DEF);
+  androNuevo();
+}
+function androSwitch(j){
+  const l = androLista(), a = androIdx!==null ? l[androIdx] : null;
+  let tj = j;
+  if(a){
+    if(androVacio(a)){ l.splice(androIdx,1); if(androIdx<j) tj = j-1; }
+    else { const f = androFalta(a); if(f.length){ showToast('Falta '+f.join(' y ')+' en este toro'); return; } defSet('andro', a, AN_DEF); }
+  }
+  androIdx = tj; render(); window.scrollTo(0,0);
 }
 function androQuitar(i){
   if(!confirm('¿Eliminar este toro?')) return;
   androLista().splice(i,1);
+  if(androIdx!==null && i<androIdx) androIdx--;
   render();
+}
+function androDetalleLineas(a){
+  const L = [], add = (k,v)=>{ if(v!==undefined && v!==null && v!=='') L.push(k+': '+v); };
+  add('Identificación', idTxt(a)); add('Color', bovColorTxt(a)); add('Condición corporal', a.cc); add('Raza', a.raza); add('Edad', a.edad);
+  [['locomotor','Ap. locomotor'],['vision','Ap. visión'],['tonoTesticular','Tono testicular'],['glandulasAnexas','Glándulas anexas']].forEach(([k,lab])=>{ add(lab, a[k]+(a[k+'Obs']?' — '+a[k+'Obs']:'')); if(!a[k]) { L.pop(); if(a[k+'Obs']) add(lab, a[k+'Obs']); } });
+  add('Circunferencia escrotal', (a.circunferencia||{}).texto); add('Ecografía testicular', (a.ecografia||{}).texto); add('Calidad seminal', (a.calidadSeminal||{}).texto);
+  if(a.raspaje==='Sí') add('Raspaje', a.raspajeTubo?'tubo '+a.raspajeTubo:'sí');
+  if(a.sangrado==='Sí') add('Sangrado', a.sangradoTubo?'tubo '+a.sangradoTubo:'sí');
+  return L;
+}
+function androFichasHTML(lista, excl, accionAbrir){
+  const items = lista.map((a,i)=>({a,i})).filter(o=>o.i!==excl && !androVacio(o.a)).reverse();
+  if(!items.length) return '';
+  return `<div class="sectiontitle">Toros cargados (${items.length})</div>` + items.map(o=>{
+    const k = 'an_'+o.i, ab = !!window._fichaAb[k];
+    return `<div class="listcard" style="cursor:pointer;" onclick="toggleFicha('${k}')">
+      <div class="meta"><b>${escapeHtml(idTxt(o.a))}</b>${o.a.raza?' · '+escapeHtml(o.a.raza):''}${o.a.cc?' · CC '+o.a.cc:''}<span style="float:right;">▾</span></div>
+      <div id="fic_${k}" style="display:${ab?'':'none'}; margin-top:8px;">
+        ${androDetalleLineas(o.a).map(l=>`<div class="meta">${escapeHtml(l)}</div>`).join('')}
+        <div class="twobtn" style="margin-top:8px;">
+          <button class="btn btn-teal" style="margin-top:0; padding:6px 12px; font-size:13px;" onclick="event.stopPropagation(); ${accionAbrir}(${o.i})">✏️ Editar</button>
+          <button class="btn btn-danger" style="margin-top:0; padding:6px 12px; font-size:13px;" onclick="event.stopPropagation(); androQuitar(${o.i})">✕ Quitar</button>
+        </div>
+      </div></div>`;
+  }).join('');
 }
 function catAndrologico(){
   if(androTrabajoId!==trabajoActual.id){ androIdx=null; androTrabajoId=trabajoActual.id; }
@@ -3422,9 +3713,8 @@ function catAndrologico(){
   androIdx = null;
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
-    <div class="sectiontitle">Examen andrológico (${lista.length} ${lista.length===1?'toro':'toros'})</div>
-    ${lista.length ? `<div class="sublist">${lista.map((a,i)=>`
-      <div class="subtile" onclick="androAbrir(${i})"><span>🐂 Caravana ${escapeHtml(a.caravana||'—')}${escapeHtml(bovColorSufijo(a))}${a.raza?' · '+escapeHtml(a.raza):''}</span><span><span class="check">✓</span> <button class="removeanimal" onclick="event.stopPropagation(); androQuitar(${i})">✕</button></span></div>`).join('')}</div>` : '<div class="fieldnote">Todavía no cargaste ningún toro.</div>'}
+    <div class="sectiontitle">Examen andrológico (${lista.filter(a=>!androVacio(a)).length} ${lista.filter(a=>!androVacio(a)).length===1?'toro':'toros'})</div>
+    ${androFichasHTML(lista, -1, 'androAbrir')}
     <button class="btn btn-green" style="margin-top:14px;" onclick="androNuevo()">+ Nuevo toro</button>
     ${botonGuardarSimple('guardarAndrologico')}
   `;
@@ -3434,12 +3724,13 @@ function catAndrologicoForm(a, i){
   return `
     <button class="backbtn" onclick="androVolverLista()">‹ Lista de toros</button>
     <div class="sectiontitle">Toro ${i+1}</div>
-    <label>Caravana</label>
-    <input type="text" id="an_caravana" value="${escapeHtml(a.caravana||'')}" oninput="anSetCampo('caravana',this.value)">
+    <div class="sectiontitle">Identificación (obligatoria)</div>
+    <div class="optrow"><div class="optbtn ${a.idTipo!=='fuego'?'selected':''}" onclick="setAndrologico('idTipo',null)">Caravana</div><div class="optbtn ${a.idTipo==='fuego'?'selected':''}" onclick="setAndrologico('idTipo','fuego')">Marca a fuego</div></div>
+    <input type="text" id="an_caravana" value="${escapeHtml(a.caravana||'')}" oninput="anSetCampo('caravana',this.value)" placeholder="${a.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
     <label>Color</label>
     <div class="optrow" style="flex-wrap:wrap;">${BOV_COLORES.map(c=>`<div class="optbtn ${a.color===c?'selected':''}" onclick="setAndrologico('color','${c}')">${c}</div>`).join('')}</div>
     ${a.color==='Otro' ? `<input type="text" value="${escapeHtml(a.colorOtro||'')}" oninput="anSetCampo('colorOtro',this.value)" placeholder="¿Qué color?">` : ''}
-    <div class="sectiontitle">Condición corporal</div>
+    <div class="sectiontitle">Condición corporal (obligatoria)</div>
     <div class="optrow">${[1,2,3,4,5].map(n=>`<div class="optbtn ${a.cc===n?'selected':''}" onclick="setAndrologico('cc',${n})">${n}</div>`).join('')}</div>
     <label>Raza</label>
     <input type="text" id="an_raza" value="${escapeHtml(a.raza||'')}" oninput="anSetCampo('raza',this.value)">
@@ -3447,10 +3738,13 @@ function catAndrologicoForm(a, i){
     <input type="text" id="an_edad" value="${escapeHtml(a.edad||'')}" oninput="anSetCampo('edad',this.value)">
     <div class="sectiontitle">Examen de aparato locomotor</div>
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.locomotor===o?'selected':''}" onclick="setAndrologico('locomotor','${o}')">${o}</div>`).join('')}</div>
+    <textarea rows="2" placeholder="Observaciones (opcional)" oninput="anSetCampo('locomotorObs',this.value)">${escapeHtml(a.locomotorObs||'')}</textarea>
     <div class="sectiontitle">Examen de aparato de la visión</div>
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.vision===o?'selected':''}" onclick="setAndrologico('vision','${o}')">${o}</div>`).join('')}</div>
+    <textarea rows="2" placeholder="Observaciones (opcional)" oninput="anSetCampo('visionObs',this.value)">${escapeHtml(a.visionObs||'')}</textarea>
     <div class="sectiontitle">Tono testicular</div>
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.tonoTesticular===o?'selected':''}" onclick="setAndrologico('tonoTesticular','${o}')">${o}</div>`).join('')}</div>
+    <textarea rows="2" placeholder="Observaciones (opcional)" oninput="anSetCampo('tonoTesticularObs',this.value)">${escapeHtml(a.tonoTesticularObs||'')}</textarea>
     <div class="sectiontitle">Exploración de glándulas anexas</div>
     <div class="optrow">${['Regular','Bueno','Malo'].map(o=>`<div class="optbtn ${a.glandulasAnexas===o?'selected':''}" onclick="setAndrologico('glandulasAnexas','${o}')">${o}</div>`).join('')}</div>
     <label>Observaciones (glándulas anexas)</label>
@@ -3469,7 +3763,9 @@ function catAndrologicoForm(a, i){
       <div class="optrow">${['Sí','No'].map(o=>`<div class="optbtn ${a[c]===o?'selected':''}" onclick="anSetSiNo('${c}','${o}')">${o}</div>`).join('')}</div>
       ${a[c]==='Sí' ? `<input type="text" value="${escapeHtml(a[c+'Tubo']||'')}" oninput="anSetCampo('${c}Tubo',this.value)" placeholder="Número de tubo">` : ''}
     `).join('')}
-    <button class="btn btn-green" style="margin-top:22px;" onclick="androVolverLista()">Guardar toro y volver a la lista</button>
+    <button class="btn btn-green" style="margin-top:22px;" onclick="androGuardarSiguiente()">Guardar y cargar siguiente toro</button>
+    <button class="btn btn-teal" onclick="androVolverLista()">Guardar y volver a la lista</button>
+    ${androFichasHTML(androLista(), i, 'androSwitch')}
   `;
 }
 function anActual(){
@@ -3494,7 +3790,7 @@ function setAndrologico(campo,valor){
 }
 function guardarAndrologico(estado){
   const l = androLista();
-  trabajoActual.examenAndrologicoLista = l.filter(a=>hasData(a));
+  trabajoActual.examenAndrologicoLista = l.filter(a=>!androVacio(a));
   androIdx = null;
   finalizarGuardado(estado);
 }
@@ -3575,7 +3871,7 @@ function renderTubosBovinoList(){
       ${window._tubosBovinoTmp.length>1 ? `<button class="removeanimal" onclick="quitarTuboBovino(${i})">✕</button>` : ''}
     </div>`).join('');
 }
-function agregarTuboBovino(){ window._tubosBovinoTmp.push({caravana:''}); renderTubosBovinoList(); }
+function agregarTuboBovino(){ const u = window._tubosBovinoTmp[window._tubosBovinoTmp.length-1]||{}; const n = {caravana:''}; if(u.color){ n.color=u.color; n.colorOtro=u.colorOtro||''; } window._tubosBovinoTmp.push(n); renderTubosBovinoList(); }
 function quitarTuboBovino(i){ window._tubosBovinoTmp.splice(i,1); renderTubosBovinoList(); }
 function guardarSangradoMasivoBovino(){
   if(!trabajoActual.examenesComplementarios) trabajoActual.examenesComplementarios={};
@@ -3598,11 +3894,12 @@ function agregarAnimalPodal(){
   const colorNuevo = bovColorGet('podal');
   const existente = q.patologiasPodales.animales.find(a=>a.caravana===val);
   if(!existente){
-    q.patologiasPodales.animales.push({caravana:val, ...colorNuevo, hallazgos:[]});
+    const nuevoA = {caravana:val, ...colorNuevo, hallazgos:[]};
+    if(window._idt.podal==='fuego') nuevoA.idTipo = 'fuego';
+    q.patologiasPodales.animales.push(nuevoA);
   } else if(colorNuevo.color){
     Object.assign(existente, colorNuevo);
   }
-  bovColorReset('podal');
   podalAnimalActivo = val;
   render();
 }
@@ -3656,6 +3953,7 @@ function guardarPodalPasada(){
     animal.hallazgos.push({tipo:t.id, otroTexto:'', miembros:w.sel[t.id].slice(), procedimientos:procs.slice(), pasadaId:pid});
   });
   if(obs) animal.hallazgos.push({tipo:'otro', otroTexto:obs, miembros:[], procedimientos:[], pasadaId:pid});
+  if(window._podalOrig){ const o = window._podalOrig; window._podalOrig = null; const last = animal.hallazgos.splice(animal.hallazgos.length - (ids.length+(obs?1:0))); animal.hallazgos.splice(Math.min(o.desde, animal.hallazgos.length), 0, ...last); }
   podalWizard = null;
   showToast('Guardado');
   render();
@@ -3683,6 +3981,36 @@ function podalGrupoTexto(g){
   if(obs.length) out += (out?' — ':'')+'Observaciones: '+obs.join(' / ');
   return out;
 }
+window._podalOrig = null;
+function podalDesdeGrupo(g){
+  const w = {sel:{}, procs:[], antib:[], antiinf:[], obs:''};
+  g.hall.forEach(h=>{
+    if(h.tipo==='otro'){ w.obs = h.otroTexto||''; return; }
+    w.sel[h.tipo] = (h.miembros||[]).slice();
+    (h.procedimientos||[]).forEach(p=>{
+      const m = p.match(/^(.*?) \((.*)\)$/), base = m ? m[1] : p;
+      if(!w.procs.includes(base)) w.procs.push(base);
+      if(m){ m[2].split(', ').forEach(x=>{ const arr = base==='Antibiótico terapia' ? w.antib : (base==='Antiinflamatorio' ? w.antiinf : null); if(arr && !arr.includes(x)) arr.push(x); }); }
+    });
+  });
+  return w;
+}
+function editarGrupoPodal(desde, n){
+  const q = trabajoActual.procedimientosQuirurgicos;
+  const animal = q.patologiasPodales.animales.find(a=>a.caravana===podalAnimalActivo);
+  podalCancelarEdicion();
+  const hall = animal.hallazgos.splice(desde, n);
+  window._podalOrig = {desde, hall};
+  podalWizard = podalDesdeGrupo({hall});
+  render(); window.scrollTo(0,0);
+}
+function podalCancelarEdicion(){
+  const o = window._podalOrig; if(!o) return;
+  const q = trabajoActual.procedimientosQuirurgicos;
+  const animal = q.patologiasPodales.animales.find(a=>a.caravana===podalAnimalActivo);
+  if(animal) animal.hallazgos.splice(o.desde, 0, ...o.hall);
+  window._podalOrig = null; podalWizard = null;
+}
 function quitarGrupoPodal(desde, n){
   const q = trabajoActual.procedimientosQuirurgicos;
   const animal = q.patologiasPodales.animales.find(a=>a.caravana===podalAnimalActivo);
@@ -3697,8 +4025,9 @@ function catPodalAnimal(){
   const w = podalForm();
   const grupos = podalGrupos(animal);
   return `
-    <button class="backbtn" onclick="podalAnimalActivo=null; podalWizard=null; render()">‹ Patologías podales</button>
-    <div class="sectiontitle">Caravana ${escapeHtml(animal.caravana)}${escapeHtml(bovColorSufijo(animal))} ${btnEditarIdent(animal.caravana)}</div>
+    <button class="backbtn" onclick="podalCancelarEdicion(); podalAnimalActivo=null; podalWizard=null; render()">‹ Patologías podales</button>
+    <div class="sectiontitle">${escapeHtml(idTxt(animal))}${escapeHtml(bovColorSufijo(animal))} ${btnEditarIdent(animal.caravana)}</div>
+    ${window._podalOrig ? `<div class="alertcard">✏️ Editando un hallazgo cargado. <button class="btn btn-outline" style="margin-top:8px; padding:6px 12px; font-size:13px;" onclick="podalCancelarEdicion(); render()">Cancelar edición</button></div>` : ''}
     <div class="fieldnote" style="margin-bottom:6px;">Tocá cada patología que encontraste y, debajo, el miembro afectado. Después elegís los procedimientos una sola vez.</div>
     ${PODAL_TIPOS.filter(t=>t.id!=='otro').map(t=>`
       <div class="optrow" style="margin-top:8px;"><div class="optbtn ${w.sel[t.id]?'selected':''}" style="flex:1;" onclick="podalTogglePat('${t.id}')">${t.lab}</div></div>
@@ -3711,15 +4040,16 @@ function catPodalAnimal(){
     ${w.procs.includes('Antiinflamatorio') ? `<div class="fieldnote" style="margin-top:8px;">Antiinflamatorio:</div><div class="optrow" style="flex-wrap:wrap;">${PODAL_ANTIINF.map(p=>`<div class="optbtn ${w.antiinf.includes(p)?'selected':''}" onclick="podalToggleSub('antiinf','${p}')">${p}</div>`).join('')}</div>` : ''}
     <label>Observaciones (dosis, otros detalles)</label>
     <textarea oninput="podalForm().obs=this.value" placeholder="Opcional">${escapeHtml(w.obs||'')}</textarea>
-    <button class="btn btn-green" style="margin-top:12px;" onclick="guardarPodalPasada()">Guardar hallazgos</button>
+    <button class="btn btn-green" style="margin-top:12px;" onclick="guardarPodalPasada()">${window._podalOrig?'Guardar cambios':'Guardar hallazgos'}</button>
     ${grupos.length ? `
       <div class="sectiontitle" style="margin-top:16px;">Hallazgos cargados</div>
       ${grupos.map(g=>`<div class="listcard" style="cursor:default;">
           <div class="meta">${escapeHtml(podalGrupoTexto(g))}</div>
           <button class="removeanimal" onclick="quitarGrupoPodal(${g.desde},${g.n})">✕</button>
+          <button class="btn btn-teal" style="margin-top:6px; padding:4px 10px; font-size:12px;" onclick="editarGrupoPodal(${g.desde},${g.n})">✏️ Editar</button>
         </div>`).join('')}
     ` : ''}
-    <button class="btn btn-teal" style="margin-top:16px;" onclick="podalAnimalActivo=null; podalWizard=null; render()">Listo, volver</button>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="podalCancelarEdicion(); podalAnimalActivo=null; podalWizard=null; render()">Listo, volver</button>
   `;
 }
 function catPatologiasPodales(){
@@ -3729,20 +4059,82 @@ function catPatologiasPodales(){
   return `
     <button class="backbtn" onclick="patologiasPodalesActivo=false; render()">‹ Aparato locomotor</button>
     <div class="sectiontitle">Patologías podales</div>
-    <label>Identificación / caravana del animal</label>
+    <label>Identificación del animal</label>
+    ${idTipoWidget('podal')}
     <input type="text" id="podal_nueva_caravana" placeholder="Ej: 245">
     ${bovColorWidget('podal')}
     <button class="btn btn-teal" style="margin-top:10px;" onclick="agregarAnimalPodal()">+ Agregar animal</button>
-    <div class="sublist" style="margin-top:16px;">
-      ${(pp.animales||[]).map(a=>`
-        <div class="subtile" onclick="podalAnimalActivo='${a.caravana}'; podalWizard=null; render()">
-          <span>🐄 Caravana ${escapeHtml(a.caravana)}${escapeHtml(bovColorSufijo(a))} ${btnEditarIdent(a.caravana)}</span>
-          <span class="check">${a.hallazgos.length} hallazgo${a.hallazgos.length===1?'':'s'}</span>
-        </div>`).join('') || '<div class="fieldnote">Todavía no agregaste animales.</div>'}
-    </div>
+    ${(pp.animales||[]).length ? `<div class="sectiontitle">Animales cargados (${pp.animales.length})</div>` + pp.animales.map((a,i)=>{
+      const k='pod_'+i, ab=!!window._fichaAb[k], grupos=podalGrupos(a);
+      return `<div class="listcard" style="cursor:pointer;" onclick="toggleFicha('${k}')">
+        <div class="meta"><b>${escapeHtml(idTxt(a))}</b>${escapeHtml(bovColorSufijo(a))} · ${a.hallazgos.length} hallazgo${a.hallazgos.length===1?'':'s'}<span style="float:right;">▾</span></div>
+        <div id="fic_${k}" style="display:${ab?'':'none'}; margin-top:8px;">
+          ${grupos.map(g=>`<div class="meta">${escapeHtml(podalGrupoTexto(g))}</div>`).join('') || '<div class="meta">Sin hallazgos todavía</div>'}
+          <div class="twobtn" style="margin-top:8px;">
+            <button class="btn btn-teal" style="margin-top:0; padding:6px 12px; font-size:13px;" onclick="event.stopPropagation(); podalAnimalActivo=${JSON.stringify(a.caravana).replace(/"/g,'&quot;')}; podalWizard=null; render()">✏️ Abrir / editar</button>
+            <button class="btn btn-danger" style="margin-top:0; padding:6px 12px; font-size:13px;" onclick="event.stopPropagation(); quitarAnimalPodal(${i})">✕ Quitar</button>
+          </div>
+        </div></div>`;
+    }).join('') : '<div class="fieldnote" style="margin-top:12px;">Todavía no agregaste animales.</div>'}
   `;
 }
+function quitarAnimalPodal(i){
+  if(!confirm('¿Quitar este animal y sus hallazgos?')) return;
+  trabajoActual.procedimientosQuirurgicos.patologiasPodales.animales.splice(i,1); render();
+}
+function resumenNutricionBov(n){
+  if(!hasData(n)) return '';
+  let out = `\nNutrición:\n`;
+  if(n.texto || (n.fotos&&n.fotos.length)) out += `  Dieta: ${campoResumen(n)}\n`;
+  if(n.pesadas && n.pesadas.length){
+    out += `  Control de pesos: ${n.pesadas.length} animales\n`;
+    out += mkTabla('Control de pesos', [...ID_COLS,'Categoría','Color','Peso (kg)','CC','Variación'], n.pesadas.map(p=>{
+      let v = ''; if(p.prevPeso!==undefined){ const d = p.peso-p.prevPeso; v = (d>=0?'+':'')+fmtNum(d,1)+' kg (anterior '+fmtNum(p.prevPeso,1)+' kg, '+fmtFecha(p.prevFecha)+')'; }
+      return [...idCols(p), p.categoria||'', bovColorTxt(p), fmtNum(p.peso,1), p.cc||'', v];
+    }));
+    if(n.proximoControl) out += `  Próximo control de pesos: ${fmtFecha(n.proximoControl.fecha)}\n`;
+  }
+  return out;
+}
+function podalFilas(a){
+  return podalGrupos(a).map(g=>{
+    const pats = [], procs = [], ab = [], ai = [], obs = [];
+    g.hall.forEach(h=>{
+      if(h.tipo==='otro'){ if(h.otroTexto) obs.push(h.otroTexto); return; }
+      const tp = PODAL_TIPOS.find(x=>x.id===h.tipo), mi = (h.miembros||[]).join(', ');
+      pats.push((tp?tp.lab:h.tipo)+(mi?' ('+mi+')':''));
+      (h.procedimientos||[]).forEach(p=>{
+        const m = p.match(/^(.*?) \((.*)\)$/), base = m?m[1]:p;
+        if(base==='Antibiótico terapia' && m) { if(!ab.includes(m[2])) ab.push(m[2]); }
+        else if(base==='Antiinflamatorio' && m) { if(!ai.includes(m[2])) ai.push(m[2]); }
+        if(!procs.includes(base)) procs.push(base);
+      });
+    });
+    return [...idCols(a), bovColorTxt(a), pats.join('; '), procs.join(', '), ab.join(', '), ai.join(', '), obs.join(' / ')];
+  });
+}
+function podalConteoAnimales(animales){
+  const m = {};
+  animales.forEach(a=>{
+    const set = new Set();
+    (a.hallazgos||[]).forEach(h=>{ if(h.tipo!=='otro'){ const tp = PODAL_TIPOS.find(x=>x.id===h.tipo); set.add(tp?tp.lab:h.tipo); } });
+    set.forEach(l=>{ m[l] = (m[l]||0)+1; });
+  });
+  return Object.keys(m).map(k=>({label:k, n:m[k]})).sort((a,b)=>b.n-a.n);
+}
 function resumenPatologiasPodales(pq){
+  const pp = pq && pq.patologiasPodales;
+  if(!pp || !pp.animales || !pp.animales.length) return '';
+  const an = pp.animales.filter(a=>a.hallazgos && a.hallazgos.length);
+  if(!an.length) return '';
+  let out = `  Patologías podales: ${an.length} animales\n`;
+  out += mkTabla('Patologías podales', [...ID_COLS,'Color','Patología (miembros)','Procedimientos','Antibiótico','Antiinflamatorio','Observaciones'], [].concat(...an.map(podalFilas)));
+  out += mkBarras('Animales por patología podal', podalConteoAnimales(an));
+  const mi = []; an.forEach(a=>a.hallazgos.forEach(h=>(h.miembros||[]).forEach(m=>mi.push(m))));
+  out += mkBarras('Miembros afectados (hallazgos)', sItems(sCuenta(mi), ['AI','AD','PI','PD']));
+  return out;
+}
+function resumenPatologiasPodalesVIEJO(pq){
   const pp = pq && pq.patologiasPodales;
   if(!pp || !pp.animales || !pp.animales.length) return '';
   let out = `  Patologías podales:\n`;
@@ -3858,7 +4250,6 @@ function agregarAnimalTratMasiva(categoria){
   if(!caravana) return;
   const observacion = inputObs ? inputObs.value.trim() : '';
   tratMasivaWizard.animales.push({caravana, ...bovColorGet('tratm'), categoria, observacion});
-  bovColorReset('tratm');
   render();
   setTimeout(()=>{
     const el1=document.getElementById('tratm_caravana_input'); if(el1){ el1.value=''; el1.focus(); }
@@ -3981,7 +4372,6 @@ function agregarAnimalVacMasiva(categoria){
   const val = input ? input.value.trim() : '';
   if(!val) return;
   vacMasivaWizard.animales.push({caravana: val, ...bovColorGet('vacm'), categoria});
-  bovColorReset('vacm');
   render();
   setTimeout(()=>{ const el=document.getElementById('vacm_caravana_input'); if(el){ el.value=''; el.focus(); } }, 0);
 }
@@ -4142,7 +4532,7 @@ function renderSanMasivoList(){
       ${window._sanMasivoTmp.length>1 ? `<button class="removeanimal" onclick="quitarFilaSanMasivo(${i})">✕</button>` : ''}
     </div>`).join('');
 }
-function agregarFilaSanMasivo(){ window._sanMasivoTmp.push({caravana:'',producto:'',dosis:'',repetir:''}); renderSanMasivoList(); }
+function agregarFilaSanMasivo(){ const u = window._sanMasivoTmp[window._sanMasivoTmp.length-1]||{}; const n = {caravana:'',producto:'',dosis:'',repetir:''}; if(u.color){ n.color=u.color; n.colorOtro=u.colorOtro||''; } window._sanMasivoTmp.push(n); renderSanMasivoList(); }
 function quitarFilaSanMasivo(i){ window._sanMasivoTmp.splice(i,1); renderSanMasivoList(); }
 function guardarSanidadMasivaBovinoTipo(){
   if(!trabajoActual.sanidad) trabajoActual.sanidad={individual:{},masivo:{}};
@@ -4956,6 +5346,8 @@ function statsHTMLQuirurgica(trabs){
   }));
   if(patol.length){
     h += sTitulo('Patologías podales') + sCards([{n:patol.length, lab:'hallazgos'}]);
+    const _anP = []; cir.forEach(c=>c.unidades.forEach(u=>{ if(u.podal) _anP.push(u.podal); }));
+    h += sBar('Animales por patología podal', podalConteoAnimales(_anP));
     h += sBar('Hallazgos por patología', sItems(sCuenta(patol)).sort((a,b)=>b.n-a.n));
     h += sBar('Miembros afectados', sItems(sCuenta(miem), ['AI','AD','PI','PD'].filter(k=>miem.includes(k))));
     h += sBar('Procedimientos realizados', sItems(sCuenta(procs)).sort((a,b)=>b.n-a.n));
@@ -5371,8 +5763,61 @@ function resumenProtocoloAnestesico(pq){
   const drogas = (pq && pq.protocoloAnestesico && pq.protocoloAnestesico.drogas) || [];
   return drogas.length ? `  Protocolo anestésico utilizado: ${drogas.join(', ')}\n` : '';
 }
+// ===== Marcadores de tablas/gráficos del informe =====
+function mkC(v){ return String(v===undefined||v===null?'':v).replace(/[|\n\r]+/g,' / ').trim(); }
+function mkTabla(titulo, cols, rows){
+  rows = rows.filter(r=>r && r.length);
+  if(!rows.length) return '';
+  return `@@T ${mkC(titulo)}\n@@H ${cols.map(mkC).join('|')}\n` + rows.map(r=>'@@R '+r.map(mkC).join('|')+'\n').join('') + '@@E\n';
+}
+function mkBarras(titulo, items){
+  items = (items||[]).filter(i=>i && i.n>0);
+  if(!items.length) return '';
+  return `@@G ${mkC(titulo)}|${items.map(i=>mkC(i.label).replace(/:/g,'·')+':'+i.n).join('|')}\n`;
+}
+function idCols(x){ return x.idTipo==='fuego' ? ['', x.caravana||'—'] : [x.caravana||'—','']; }
+const ID_COLS = ['Caravana','Marca a fuego'];
+function mkParse(txt){
+  const out = []; let cur = null, buf = [];
+  const flush = ()=>{ if(buf.length){ out.push({k:'txt', s:buf.join('\n')}); buf = []; } };
+  String(txt).split('\n').forEach(l=>{
+    if(l.startsWith('@@T ')){ flush(); cur = {k:'tabla', titulo:l.slice(4), cols:[], rows:[]}; }
+    else if(l.startsWith('@@H ') && cur) cur.cols = l.slice(4).split('|');
+    else if(l.startsWith('@@R ') && cur) cur.rows.push(l.slice(4).split('|'));
+    else if(l==='@@E' && cur){ out.push(cur); cur = null; }
+    else if(l.startsWith('@@G ')){ flush(); const pr = l.slice(4).split('|'); out.push({k:'graf', titulo:pr[0], items:pr.slice(1).map(x=>{ const i = x.lastIndexOf(':'); return {label:x.slice(0,i), n:parseInt(x.slice(i+1),10)||0}; })}); }
+    else buf.push(l);
+  });
+  flush();
+  out.forEach((b,i)=>{ if(b.k==='tabla' && i>0 && out[i-1].k==='txt'){ const ls = out[i-1].s.split('\n').filter(x=>x.trim()); const last = (ls[ls.length-1]||'').trim(); if(last.startsWith(b.titulo)) b.titulo = ''; } });
+  return out;
+}
+function mkColsVisibles(b){ return b.cols.map((c,i)=>i).filter(i=>b.rows.some(r=>r[i] && r[i]!=='')); }
+function mkAPlano(txt){
+  return mkParse(txt).map(b=>{
+    if(b.k==='txt') return b.s;
+    if(b.k==='graf') return '  '+b.titulo+': '+b.items.map(i=>i.label+' '+i.n).join(', ');
+    const vis = mkColsVisibles(b);
+    return (b.titulo?'  '+b.titulo+':\n':'') + b.rows.map(r=>'    '+vis.map(i=>b.cols[i]+' '+r[i]).filter((x,j)=>r[vis[j]]).join(', ')).join('\n');
+  }).join('\n').replace(/\n{3,}/g,'\n\n');
+}
+function mkAHTML(txt){
+  return mkParse(txt).map(b=>{
+    if(b.k==='txt') return `<div style="white-space:pre-wrap; font-size:12.5px; line-height:1.6;">${escapeHtml(b.s)}</div>`;
+    if(b.k==='graf') return sBar(b.titulo, b.items);
+    const vis = mkColsVisibles(b);
+    return `${b.titulo?`<div style="margin:10px 0 4px; font-size:12.5px; font-weight:700;">${escapeHtml(b.titulo)}</div>`:'<div style="height:4px;"></div>'}
+      <div style="overflow-x:auto;"><table style="border-collapse:collapse; font-size:12px; min-width:100%;">
+      <thead><tr>${vis.map(i=>`<th style="text-align:left; padding:5px 8px; background:var(--line); white-space:nowrap;">${escapeHtml(b.cols[i])}</th>`).join('')}</tr></thead>
+      <tbody>${b.rows.map(r=>`<tr>${vis.map(i=>`<td style="padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top;">${escapeHtml(r[i]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }).join('');
+}
+function resumenTrabajoHTML(t){
+  if(t.especie==='Bovino') return mkAHTML(resumenTrabajoBovino(t));
+  return `<div style="white-space:pre-wrap; font-size:12.5px; line-height:1.6;">${escapeHtml(resumenTrabajo(t))}</div>`;
+}
 function resumenTrabajo(t){
-  if(t.especie==='Bovino') return resumenTrabajoBovino(t);
+  if(t.especie==='Bovino') return mkAPlano(resumenTrabajoBovino(t));
   if(t.especie==='Canino'||t.especie==='Felino'||t.especie==='Otros') return resumenTrabajoMascota(t);
   let out = `Especie: ${t.especie}\n`;
   if(t.datosPaciente && hasData(t.datosPaciente)) out += `\nPaciente: ${t.datosPaciente.nombre||'—'} · ${t.datosPaciente.pelaje||''} · ${t.datosPaciente.edad||''} · ${t.datosPaciente.sexo||''}\n`;
@@ -5429,7 +5874,7 @@ function resumenTrabajo(t){
 }
 function resumenTrabajoBovino(t){
   let out = `Especie: Bovino\n`;
-  if(t.registro && t.registro.caravana) out += `\nCaravana de registro: ${t.registro.caravana}${bovColorSufijo(t.registro)}\n`;
+  if(t.registro && t.registro.caravana) out += `\n${t.registro.idTipo==='fuego'?'Marca a fuego':'Caravana'} de registro: ${t.registro.caravana}${bovColorSufijo(t.registro)}\n`;
   if(t.exploracionClinica && hasData(t.exploracionClinica)){
     out += `\nExploración clínica:\n`;
     if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
@@ -5445,58 +5890,58 @@ function resumenTrabajoBovino(t){
       const pren = dg.registros.filter(x=>x.resultado==='Preñada').length;
       const vac = dg.registros.filter(x=>x.resultado==='Vacía').length;
       out += `  Diagnóstico de gestación: ${dg.registros.length} animales (${pren} preñadas, ${vac} vacías)\n`;
-      dg.registros.forEach(x=>{
-        out += `    Caravana ${x.caravana||'—'}: ${x.resultado||'—'}${x.subresultado?' ('+x.subresultado+')':''}${x.otro?', '+x.otro:''}${bovExtrasLinea(x)}\n`;
-      });
+      out += mkTabla('Diagnóstico de gestación', [...ID_COLS,'Categoría','Color','CC','Resultado','Aplicaciones'], dg.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', (x.resultado||'—')+(x.subresultado?' ('+x.subresultado+')':'')+(x.otro?', '+x.otro:''), aplicTxt(x)]));
+      out += mkBarras('Diagnóstico de gestación', [{label:'Preñadas', n:pren},{label:'Vacías', n:vac}]);
+      out += mkBarras('Preñadas según ubicación', ['Cabeza','Cuerpo','Cola'].map(k=>({label:k, n:dg.registros.filter(x=>x.resultado==='Preñada' && x.subresultado===k).length})));
       if(dg.comentario) out += `    Comentario: ${dg.comentario}\n`;
     }
     if(r.preservicio && r.preservicio.registros && r.preservicio.registros.length){
       out += `  Preservicio: ${r.preservicio.registros.length} animales\n`;
-      r.preservicio.registros.forEach(x=>{
-        out += `    Caravana ${x.caravana||'—'}: GDR ${x.gdr||'—'}, destino ${(x.destino==='Otra'||x.destino==='Otro')?(x.destinoOtro||'Otro'):(x.destino||'—')}${bovExtrasLinea(x)}\n`;
-      });
+      const _pr = r.preservicio.registros, _dest = x=>(x.destino==='Otra'||x.destino==='Otro')?(x.destinoOtro||'Otro'):(x.destino||'');
+      out += mkTabla('Preservicio', [...ID_COLS,'Categoría','Color','CC','GDR','Destino','Aplicaciones'], _pr.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.gdr||'', _dest(x), aplicTxt(x)]));
+      out += mkBarras('Distribución de GDR', sItems(sCuenta(_pr.map(x=>x.gdr)), Object.keys(sCuenta(_pr.map(x=>x.gdr))).sort()).map(i=>({label:'GDR '+i.label, n:i.n})));
+      out += mkBarras('Destino', sItems(sCuenta(_pr.map(_dest))));
     }
     if(r.servicio){
       if(r.servicio.iatf && r.servicio.iatf.length){
         const _lg = r.servicio.iatf.filter(x=>!x.etapa), _et = r.servicio.iatf.filter(x=>x.etapa);
         if(_lg.length){
-          out += `  Servicio IATF: ${_lg.length} animales\n`;
-          _lg.forEach(x=>{
-            out += `    Caravana ${x.caravana||'—'}: inicio ${fmtFecha(x.fecha)}, retiro dispositivo ${fmtFecha(x.retiro)}, inseminación ${fmtFecha(x.inseminacion)}${x.queHizo?', '+x.queHizo:''}${bovExtrasLinea(x)}\n`;
-          });
+          out += mkTabla('Servicio IATF', [...ID_COLS,'Categoría','Color','CC','Inicio','Retiro dispositivo','Inseminación','Qué se hizo','Aplicaciones'], _lg.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', fmtFecha(x.fecha), fmtFecha(x.retiro), fmtFecha(x.inseminacion), x.queHizo||'', aplicTxt(x)]));
         }
         if(_et.length){
-          out += `  IATF:\n`;
-          _et.slice().sort((a,b)=> String(a.caravana).localeCompare(String(b.caravana), undefined, {numeric:true}) || (IATF_ORDEN[a.etapa]-IATF_ORDEN[b.etapa])).forEach(x=>{
-            out += `    Caravana ${x.caravana||'—'} — ${IATF_PASOS[x.etapa]} (${fmtFecha(x.fecha)}): ${iatfDetalle(x)}\n`;
-          });
+          const _s = _et.slice().sort((a,b)=> String(a.caravana).localeCompare(String(b.caravana), undefined, {numeric:true}) || (IATF_ORDEN[a.etapa]-IATF_ORDEN[b.etapa]));
+          const _det = x=>{ const p = []; if(x.etapa==='retiro' && x.conDispositivo) p.push(x.conDispositivo); if(x.etapa==='inseminacion'){ if(x.pintada) p.push(x.pintada); if(x.toro) p.push('toro '+x.toro); } if(x.vet) p.push('vet: '+x.vet); return p.join(', '); };
+          out += mkTabla('IATF', [...ID_COLS,'Categoría','Color','CC','Paso','Fecha','Detalle','Aplicaciones'], _s.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', IATF_PASOS[x.etapa], fmtFecha(x.fecha), _det(x), aplicTxt(x)]));
+          out += mkBarras('Animales por paso de IATF', Object.keys(IATF_PASOS).map(k=>({label:IATF_PASOS[k], n:new Set(_et.filter(x=>x.etapa===k).map(x=>x.caravana)).size})));
         }
       }
       if(r.servicio.natural) out += `  Servicio natural: ${r.servicio.natural}\n`;
     }
     if(r.examenGinecologico && r.examenGinecologico.registros && r.examenGinecologico.registros.length){
       out += `  Examen ginecológico: ${r.examenGinecologico.registros.length} animales\n`;
-      r.examenGinecologico.registros.forEach(x=>{
-        out += `    Caravana ${x.caravana||'—'}${bovExtrasLinea(x)}${x.texto?': '+x.texto:''}\n`;
-      });
+      out += mkTabla('Examen ginecológico', [...ID_COLS,'Categoría','Color','CC','Hallazgos','Aplicaciones'], r.examenGinecologico.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.texto||'', aplicTxt(x)]));
     }
     if(r.observacion) out += `  Observación general: ${r.observacion}\n`;
   }
   const toros = androToros(t);
   if(toros.length){
-    toros.forEach((a,idx)=>{
-      out += `\nExamen andrológico${toros.length>1?' (toro '+(idx+1)+' de '+toros.length+')':''}: caravana ${a.caravana||'—'}${bovColorSufijo(a)}, raza ${a.raza||'—'}, edad ${a.edad||'—'}\n`;
-      if(a.cc) out += `  Condición corporal: ${a.cc}\n`;
-      if(a.locomotor) out += `  Ap. locomotor: ${a.locomotor}\n`;
-      if(a.vision) out += `  Ap. visión: ${a.vision}\n`;
-      if(a.tonoTesticular) out += `  Tono testicular: ${a.tonoTesticular}\n`;
-      if(a.glandulasAnexas) out += `  Exploración de glándulas anexas: ${a.glandulasAnexas}${a.glandulasAnexasObs?' — '+a.glandulasAnexasObs:''}\n`;
-      if(hasData(a.circunferencia)) out += `  Circunferencia escrotal: ${campoResumen(a.circunferencia)}\n`;
-      if(hasData(a.ecografia)) out += `  Ecografía testicular: ${campoResumen(a.ecografia)}\n`;
-      if(hasData(a.calidadSeminal)) out += `  Calidad seminal: ${campoResumen(a.calidadSeminal)}\n`;
-      if(a.raspaje==='Sí') out += `  Raspaje: ${a.raspajeTubo?'tubo '+a.raspajeTubo:'sí'}\n`;
-      if(a.sangrado==='Sí') out += `  Sangrado: ${a.sangradoTubo?'tubo '+a.sangradoTubo:'sí'}\n`;
+    const _bo = (a,k)=> (a[k]||'') + (a[k+'Obs'] ? ((a[k]?' — ':'')+a[k+'Obs']) : '');
+    out += `\nExamen andrológico: ${toros.length} ${toros.length===1?'toro':'toros'}\n`;
+    out += mkTabla('Examen andrológico', [...ID_COLS,'Color','Raza','Edad','CC','Ap. locomotor','Ap. visión','Tono testicular','Glándulas anexas'], toros.map(a=>[...idCols(a), bovColorTxt(a), a.raza||'', a.edad||'', a.cc||'', _bo(a,'locomotor'), _bo(a,'vision'), _bo(a,'tonoTesticular'), _bo(a,'glandulasAnexas')]));
+    toros.forEach(a=>{
+      const L = [];
+      if(hasData(a.circunferencia)) L.push(`Circunferencia escrotal: ${campoResumen(a.circunferencia)}`);
+      if(hasData(a.ecografia)) L.push(`Ecografía testicular: ${campoResumen(a.ecografia)}`);
+      if(hasData(a.calidadSeminal)) L.push(`Calidad seminal: ${campoResumen(a.calidadSeminal)}`);
+      if(a.raspaje==='Sí') L.push(`Raspaje: ${a.raspajeTubo?'tubo '+a.raspajeTubo:'sí'}`);
+      if(a.sangrado==='Sí') L.push(`Sangrado: ${a.sangradoTubo?'tubo '+a.sangradoTubo:'sí'}`);
+      if(L.length) out += `  ${a.idTipo==='fuego'?'Marca a fuego':'Caravana'} ${a.caravana||'—'}:\n` + L.map(l=>'    '+l).join('\n') + '\n';
     });
+    if(toros.length>1){
+      out += mkBarras('Condición corporal', [1,2,3,4,5].map(n=>({label:'CC '+n, n:toros.filter(a=>Number(a.cc)===n).length})));
+      out += mkBarras('Tono testicular', ['Bueno','Regular','Malo'].map(k=>({label:k, n:toros.filter(a=>a.tonoTesticular===k).length})));
+      out += mkBarras('Aparato locomotor', ['Bueno','Regular','Malo'].map(k=>({label:k, n:toros.filter(a=>a.locomotor===k).length})));
+    }
   }
   if(t.examenesComplementarios && hasData(t.examenesComplementarios)){
     const ex = t.examenesComplementarios;
@@ -5506,7 +5951,7 @@ function resumenTrabajoBovino(t){
     ['ecografia','radiografia','sangrado','otro'].forEach(k=>{ if(hasData(ex[k])) out += `  ${etiquetasCompB[k]}: ${campoResumen(ex[k])}\n`; });
     if(ex.sangradoMasivo && ex.sangradoMasivo.tubos && ex.sangradoMasivo.tubos.length){
       out += `  Análisis de sangre grupal: ${ex.sangradoMasivo.tubos.length} animales\n`;
-      ex.sangradoMasivo.tubos.forEach(tb=>{ if(tb.caravana) out += `    Caravana ${tb.caravana}${bovColorSufijo(tb)}\n`; });
+      out += mkTabla('Análisis de sangre grupal', [...ID_COLS,'Color'], ex.sangradoMasivo.tubos.filter(tb=>tb.caravana).map(tb=>[...idCols(tb), bovColorTxt(tb)]));
       if(ex.sangradoMasivo.observaciones) out += `    Observaciones: ${ex.sangradoMasivo.observaciones}\n`;
     }
     out += resumenTomaMuestra(ex.tomaMuestra);
@@ -5516,7 +5961,7 @@ function resumenTrabajoBovino(t){
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
     out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
-    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (caravana ${v.caravana||'—'}${bovColorTxt(v)?', color '+bovColorTxt(v):''})\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (${v.idTipo==='fuego'?'marca a fuego':'caravana'} ${v.caravana||'—'}${bovColorTxt(v)?', color '+bovColorTxt(v):''})\n    Qué se hizo: ${campoResumen(v)}\n`; });
     out += resumenPatologiasPodales(t.procedimientosQuirurgicos);
     out += resumenSeguimientoCirugia(t.procedimientosQuirurgicos);
   }
@@ -5531,11 +5976,11 @@ function resumenTrabajoBovino(t){
           if(g.dosis) out += `    Dosis: ${g.dosis}\n`;
           if(g.repetir) out += `    ⚠️ REPETIR: ${g.repetir}\n`;
           out += `    Animales tratados: ${g.animales.length}\n`;
-          g.animales.forEach(a=> out += `      ${a.caravana}${bovColorSufijo(a)} - ${a.categoria}\n`);
+          out += mkTabla('Animales vacunados', [...ID_COLS,'Categoría','Color'], g.animales.map(a=>[...idCols(a), a.categoria||'', bovColorTxt(a)]));
         });
       } else if(v && v.filas && v.filas.length){
         out += `  Masivo - ${k}: ${v.filas.length} animales\n`;
-        v.filas.forEach(f=>{ if(f.caravana||f.producto) out += `    Caravana ${f.caravana||'—'}${bovColorSufijo(f)}${f.producto?': '+f.producto:''}${f.dosis?', dosis '+f.dosis:''}${f.repetir?', repetir '+f.repetir:''}\n`; });
+        out += mkTabla('Masivo - '+k, [...ID_COLS,'Color','Producto','Dosis','Repetir'], v.filas.filter(f=>f.caravana||f.producto).map(f=>[...idCols(f), bovColorTxt(f), f.producto||'', f.dosis||'', f.repetir||'']));
         if(v.observaciones) out += `    Observaciones: ${v.observaciones}\n`;
       }
     });
@@ -5548,12 +5993,12 @@ function resumenTrabajoBovino(t){
         out += `  Tratamiento utilizado: ${g.descripcion}\n`;
         if(g.vet) out += `    Médico veterinario actuante: ${g.vet}\n`;
         out += `    Animales tratados: ${g.animales.length}\n`;
-        g.animales.forEach(a=> out += `      ${a.caravana}${bovColorSufijo(a)} - ${a.categoria}${a.observacion?' — '+a.observacion:''}\n`);
+        out += mkTabla('Animales tratados', [...ID_COLS,'Categoría','Color','Observación'], g.animales.map(a=>[...idCols(a), a.categoria||'', bovColorTxt(a), a.observacion||'']));
       });
     }
   }
   out += resumenNecropsia(t.necropsia);
-  out += resumenNutricion(t.nutricion);
+  out += resumenNutricionBov(t.nutricion);
   if(hasData(t.otroProcedimiento)) out += `\nOtro procedimiento: ${campoResumen(t.otroProcedimiento)}\n`;
   if(hasData(t.observacionesFinales)) out += `\nObservaciones: ${campoResumen(t.observacionesFinales)}\n`;
   return out;
@@ -5733,28 +6178,7 @@ function renderInformeHTML(t, cliente, opts){
   html += `</div>`;
   }
 
-  if(t.especie==='Bovino' && t.exploracionReproductiva && t.exploracionReproductiva.diagnosticoGestacion){
-    const regs = t.exploracionReproductiva.diagnosticoGestacion.registros||[];
-    if(regs.length){
-      const pren = regs.filter(x=>x.resultado==='Preñada').length;
-      const vac = regs.filter(x=>x.resultado==='Vacía').length;
-      const pct = Math.round((pren/regs.length)*100);
-      const cab = regs.filter(x=>x.subresultado==='Cabeza').length;
-      const cue = regs.filter(x=>x.subresultado==='Cuerpo').length;
-      const col = regs.filter(x=>x.subresultado==='Cola').length;
-      html += `<div style="margin-bottom:16px;">
-        <b>Diagnóstico de gestación — ${regs.length} animales</b>
-        <div style="display:flex; height:22px; border-radius:5px; overflow:hidden; margin-top:8px;">
-          <div style="width:${pct}%; background:var(--green);"></div>
-          <div style="width:${100-pct}%; background:var(--line);"></div>
-        </div>
-        <div class="fieldnote">Preñadas: ${pren} (${pct}%) · Vacías: ${vac} (${100-pct}%)</div>
-        ${pren?`<div class="fieldnote">De las preñadas — Cabeza: ${cab} · Cuerpo: ${cue} · Cola: ${col}</div>`:''}
-      </div>`;
-    }
-  }
-
-  html += `<div style="white-space:pre-wrap; font-size:12.5px; line-height:1.6;">${escapeHtml(resumenTrabajo(t))}</div>`;
+  html += resumenTrabajoHTML(t);
 
   const fotos = recolectarFotos(t);
   if(fotos.length){
