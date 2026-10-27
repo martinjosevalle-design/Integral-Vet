@@ -476,6 +476,7 @@ function render(){
   else if(view==='calendario') main.innerHTML = viewCalendario();
   afterRenderHooks();
   autoguardarBorrador();
+  bastonInyectar();
 }
 function afterRenderHooks(){
   if(view==='clienteBuscar') filtrarClientesLive();
@@ -689,6 +690,7 @@ function viewHome(){
   const recSanidadEquino = recordatoriosSanidadEquino();
   return `
     ${borradoresHomeHTML()}
+    ${bastonHomeHTML()}
     ${recCalendario.length ? `
       <div class="sectiontitle">Próximos eventos (48 hs)</div>
       ${recCalendario.map(e=>`<div class="alertcard"><b>${fmtFecha(e.fecha)}</b> — ${escapeHtml(e.nota)}</div>`).join('')}
@@ -1117,6 +1119,142 @@ function borradoresHomeHTML(){
   }).join('');
 }
 // Aviso al salir: si hay algo cargado sin guardar, pregunta antes de salir
+// ===== Lecturas del bastón (Gallagher HR5): pegar lista exportada y usarla en los campos de identificación =====
+function bastonGet(){ try{ const o = JSON.parse(localStorage.getItem('iv_baston')||'[]'); return Array.isArray(o)?o:[]; }catch(e){ return []; } }
+function bastonSet(l){ try{ localStorage.setItem('iv_baston', JSON.stringify(l)); }catch(e){} }
+function bastonCsvFilas(txt){
+  const filas = [];
+  String(txt||'').replace(/\r/g,'').split('\n').forEach(l=>{
+    if(!l.trim()) return;
+    const c = []; let cur = '', q = false;
+    const sep = l.includes('\t') ? '\t' : (l.includes(';') && !l.includes(',') ? ';' : ',');
+    for(const ch of l){ if(ch==='"') q = !q; else if(ch===sep && !q){ c.push(cur.trim()); cur = ''; } else cur += ch; }
+    c.push(cur.trim()); filas.push(c);
+  });
+  return filas;
+}
+function bastonParsear(txt){
+  const filas = bastonCsvFilas(txt), out = [];
+  if(!filas.length) return out;
+  const norm = x=>String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const h = filas[0].map(norm);
+  const iTag = h.findIndex(x=>/etiqueta|tag|visual|numero/.test(x) && !/electron|id elec/.test(x));
+  const iEid = h.findIndex(x=>/electron|eid/.test(x));
+  const iFec = h.findIndex(x=>/fecha|date/.test(x));
+  const iHor = h.findIndex(x=>/^time|hora/.test(x));
+  const conEnc = iEid>=0 || iTag>=0;
+  (conEnc ? filas.slice(1) : filas).forEach(c=>{
+    let tag = '', eid = '', fecha = '', hora = '';
+    if(conEnc){ tag = (c[iTag]||'').trim(); eid = (c[iEid]||'').trim(); fecha = (c[iFec]||'').trim(); hora = (c[iHor]||'').trim(); }
+    else {
+      const linea = c.join(' ');
+      const m = linea.match(/\b(\d{3})\s?(\d{12})\b/) || linea.match(/\b(\d{15})\b/);
+      if(m){ eid = m[0]; tag = linea.replace(m[0],'').replace(/[,;\s]+/g,' ').trim().split(' ')[0] || ''; }
+      else tag = (c[0]||'').trim();
+    }
+    const eidLimpio = eid.replace(/\s+/g,'');
+    if(!tag && !eidLimpio) return;
+    out.push({tag: tag || eidLimpio, eid: eid, fecha: fecha, hora: hora, usada: false});
+  });
+  return out;
+}
+function bastonCargar(txt){
+  const nuevos = bastonParsear(txt);
+  if(!nuevos.length) return 0;
+  const l = bastonGet(), claves = new Set(l.map(x=>(x.eid||x.tag).replace(/\s+/g,'')+'|'+x.fecha+'|'+x.hora));
+  let n = 0;
+  nuevos.forEach(x=>{ const k = (x.eid||x.tag).replace(/\s+/g,'')+'|'+x.fecha+'|'+x.hora; if(!claves.has(k)){ l.push(x); claves.add(k); n++; } });
+  l.sort((a,b)=>((a.fecha||'')+(a.hora||'')).localeCompare((b.fecha||'')+(b.hora||'')));
+  bastonSet(l);
+  return n;
+}
+function bastonEidDe(tag){ const x = bastonGet().find(y=>y.tag===String(tag||'').trim() && y.eid); return x ? x.eid : ''; }
+window._bastonInput = null;
+function bastonPendientes(){ return bastonGet().filter(x=>!x.usada).length; }
+function bastonIyectarBoton(){}
+function bastonInyectar(){
+  const main = document.getElementById('main'); if(!main) return;
+  main.querySelectorAll('input[type=text]').forEach(inp=>{
+    if(inp.dataset.bast || inp.classList.contains('searchbar')) return;
+    const ph = (inp.getAttribute('placeholder')||'');
+    if(!/^(N° de caravana|Número de caravana|Marca a fuego|Caravana|Ej: 245)$/i.test(ph)) return;
+    inp.dataset.bast = '1';
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn btn-outline';
+    b.style.cssText = 'margin-top:6px; padding:6px 12px; font-size:13px; width:auto;';
+    b.textContent = '📡 Bastón';
+    b.onclick = ()=>{ window._bastonInput = inp; bastonSiguiente(); };
+    inp.insertAdjacentElement('afterend', b);
+  });
+}
+function bastonAplicar(inp, tag){
+  inp.value = tag;
+  inp.dispatchEvent(new Event('input', {bubbles:true}));
+  inp.dispatchEvent(new Event('change', {bubbles:true}));
+}
+function bastonSiguiente(){
+  const inp = window._bastonInput, l = bastonGet();
+  const i = l.findIndex(x=>!x.usada);
+  if(i<0 || !inp || !document.body.contains(inp)){ bastonAbrir(); return; }
+  bastonAplicar(inp, l[i].tag);
+  l[i].usada = true; bastonSet(l);
+  showToast('Caravana '+l[i].tag+' · quedan '+(bastonPendientes())+' en el bastón');
+}
+function bastonUsar(i){
+  const l = bastonGet(), inp = window._bastonInput;
+  if(!l[i]) return;
+  if(inp && document.body.contains(inp)){ bastonAplicar(inp, l[i].tag); l[i].usada = true; bastonSet(l); bastonCerrar(); showToast('Caravana '+l[i].tag); }
+  else { l[i].usada = !l[i].usada; bastonSet(l); bastonDibujar(); }
+}
+function bastonCerrar(){ const o = document.getElementById('bastonOverlay'); if(o) o.remove(); if(view==='home') render(); }
+function bastonAbrir(){
+  if(document.getElementById('bastonOverlay')) return;
+  const ov = document.createElement('div');
+  ov.id = 'bastonOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:100; display:flex; align-items:center; justify-content:center; padding:16px;';
+  ov.innerHTML = `<div style="background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; max-width:460px; width:100%; max-height:90vh; overflow-y:auto;">
+    <div class="sectiontitle" style="margin-top:0;">📡 Lecturas del bastón</div>
+    <div class="fieldnote">En la app de Gallagher: Transferir al teléfono → Sesiones → abrir la sesión → Compartir → <b>Copiar</b>. Después pegá acá.</div>
+    <textarea id="bastonTxt" rows="4" placeholder="Pegá acá la lista copiada (o cargá el archivo CSV)"></textarea>
+    <div class="twobtn"><button class="btn btn-teal" onclick="bastonPegar()">Cargar lista</button>
+    <button class="btn btn-outline" onclick="document.getElementById('bastonArch').click()">Elegir archivo</button></div>
+    <input type="file" id="bastonArch" accept=".csv,.txt,text/csv,text/plain" style="display:none" onchange="bastonArchivo(this)">
+    <div id="bastonLista"></div>
+    <button class="btn btn-teal" style="margin-top:10px;" onclick="bastonCerrar()">Cerrar</button>
+  </div>`;
+  document.body.appendChild(ov);
+  bastonDibujar();
+}
+function bastonDibujar(){
+  const c = document.getElementById('bastonLista'); if(!c) return;
+  const l = bastonGet();
+  if(!l.length){ c.innerHTML = '<div class="fieldnote" style="margin-top:10px;">Todavía no hay lecturas cargadas.</div>'; return; }
+  c.innerHTML = `<div class="sectiontitle">${l.filter(x=>!x.usada).length} pendientes de ${l.length}</div>` + l.map((x,i)=>`
+    <div class="listcard" style="cursor:pointer; opacity:${x.usada?.5:1};" onclick="bastonUsar(${i})">
+      <div class="meta"><b>${escapeHtml(x.tag)}</b>${x.usada?' · usada':''}<span style="float:right;">${escapeHtml((x.hora||'').slice(0,5))}</span></div>
+      <div class="fieldnote" style="margin:0;">${escapeHtml(x.eid||'')}</div></div>`).join('') +
+    `<button class="btn btn-outline" style="margin-top:8px;" onclick="bastonReiniciar()">Marcar todas como pendientes</button>
+     <button class="btn btn-danger" onclick="bastonVaciar()">Vaciar lista</button>`;
+}
+function bastonPegar(){
+  const t = document.getElementById('bastonTxt').value;
+  const n = bastonCargar(t);
+  if(!n){ showToast('No encontré lecturas nuevas en ese texto'); return; }
+  document.getElementById('bastonTxt').value = '';
+  showToast(n+' lecturas cargadas'); bastonDibujar();
+}
+function bastonArchivo(el){
+  const f = el.files && el.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{ const n = bastonCargar(String(r.result||'')); showToast(n?(n+' lecturas cargadas'):'No encontré lecturas nuevas'); bastonDibujar(); el.value=''; };
+  r.readAsText(f);
+}
+function bastonReiniciar(){ const l = bastonGet(); l.forEach(x=>x.usada=false); bastonSet(l); bastonDibujar(); }
+function bastonVaciar(){ if(!confirm('¿Vaciar toda la lista del bastón?')) return; bastonSet([]); bastonDibujar(); }
+function bastonHomeHTML(){
+  const n = bastonPendientes();
+  return `<div class="cattile" style="margin-bottom:10px;" onclick="window._bastonInput=null; bastonAbrir()"><div class="left"><span class="emoji">📡</span><span class="lab">Lecturas del bastón${n?' ('+n+' pendientes)':''}</span></div></div>`;
+}
 function preguntarSalida(destinoFn){
   if(!trabajoSucio()){ if(trabajoActual) borradorEliminar(trabajoActual._borradorId); trabajoActual = null; destinoFn(); return; }
   borradorGuardarAhora();
@@ -2772,6 +2910,7 @@ function agregarPesada(){
   if(!car){ showToast('Falta la caravana'); return; }
   if(!d.categoria){ showToast('Elegí la categoría'); return; }
   if(!(peso>0)){ showToast('Falta el peso'); return; }
+  if(dupConfirmar('pesos', car)) return;
   const ei = edIdx('pesos'), previo = ei!==null ? regsDe('pesos')[ei] : null;
   const fecha = previo ? previo.fecha : hoyISO();
   const h = pesadasHistorial(car).filter(x=>x.fecha<fecha);
@@ -2828,7 +2967,8 @@ function catNutricionBovino(){
       ${edBanner('pesos')}
       <div class="sectiontitle">Identificación</div>
       <div class="optrow"><div class="optbtn ${d.idTipo!=='fuego'?'selected':''}" onclick="window._pesoTmp.idTipo=null; render()">Caravana</div><div class="optbtn ${d.idTipo==='fuego'?'selected':''}" onclick="window._pesoTmp.idTipo='fuego'; render()">Marca a fuego</div></div>
-      <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._pesoTmp.caravana=this.value; pesoHintActualizar()" placeholder="${d.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
+      <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._pesoTmp.caravana=this.value; pesoHintActualizar(); dupAviso('_pesoTmp')" placeholder="${d.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
+      <div id="dup__pesoTmp" class="fieldnote" style="color:var(--amber,#d9a21b); font-weight:600;"></div>
       <div class="fieldnote" id="peso_hint">${escapeHtml(pesoHintHTML(d.caravana.trim()))}</div>
       <div class="sectiontitle">Categoría</div>
       <div class="optrow" style="flex-wrap:wrap;">${NUTRI_CATEGORIAS.map(c=>`<div class="optbtn ${d.categoria===c?'selected':''}" onclick="pesoSetCat('${c}')">${c}</div>`).join('')}</div>
@@ -3136,6 +3276,7 @@ function subDiagnosticoGestacion(r){
     <label>Otro (opcional)</label>
     <input type="text" value="${escapeHtml(d.otro)}" oninput="window._diagTmp.otro=this.value" placeholder="Algún detalle extra">
     ${bovExtrasAplic('_diagTmp')}
+    ${bovMuestraWidget('_diagTmp','diag')}
     <button class="btn btn-green" onclick="agregarDiagRegistro()">${edIdx('diag')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
     ${listaAnimalesCtx('diag')}
     <label style="margin-top:22px;">Comentario general</label>
@@ -3147,10 +3288,11 @@ function setDiagResultado(v){ window._diagTmp.resultado=v; if(v==='Vacía') wind
 function agregarDiagRegistro(){
   const d = window._diagTmp;
   if(!d.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
-  if(!d.caravana || !d.resultado){ showToast('Falta caravana o resultado'); return; }
+  if(!d.resultado){ showToast('Falta el resultado'); return; }
+  if(dupConfirmar('diag', d.caravana)) return;
   const _er = edIdx('diag')!==null;
-  regGuardar('diag', {...d, caravana:d.caravana.trim()});
-  defSet('diag', d, CAMPOS_DEF_BOV);
+  regGuardar('diag', {...d, caravana:(d.caravana||'').trim()});
+  defSet('diag', d, CAMPOS_DEF_REP);
   window._diagTmp = tmpFresh('diag');
   if(_er) showToast('Cambios guardados');
   render();
@@ -3177,10 +3319,11 @@ function subPreservicio(r){
     </div>
     <div class="sectiontitle">Destino</div>
     <div class="optrow">
-      ${['IATF','Servicio natural','Descarte','Otro'].map(o=>`<div class="optbtn ${p.destino===o?'selected':''}" onclick="window._presTmp.destino='${o}'; if('${o}'!=='Otro') window._presTmp.destinoOtro=''; render()">${o}</div>`).join('')}
+      ${['IATF','Servicio natural','Descarte','Preñada','Otro'].map(o=>`<div class="optbtn ${p.destino===o?'selected':''}" onclick="window._presTmp.destino='${o}'; if('${o}'!=='Otro') window._presTmp.destinoOtro=''; render()">${o}</div>`).join('')}
     </div>
     ${p.destino==='Otro' ? `<input type="text" value="${escapeHtml(p.destinoOtro||'')}" oninput="window._presTmp.destinoOtro=this.value" placeholder="¿Cuál destino?">` : ''}
     ${bovExtrasAplic('_presTmp')}
+    ${bovMuestraWidget('_presTmp','pres')}
     <button class="btn btn-green" onclick="agregarPresRegistro()">${edIdx('pres')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
     ${listaAnimalesCtx('pres')}
     ${botonGuardarSimple('guardarPreservicioFinal')}
@@ -3189,10 +3332,11 @@ function subPreservicio(r){
 function agregarPresRegistro(){
   const p = window._presTmp;
   if(!p.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
-  if(!p.caravana || !p.gdr || !p.destino){ showToast('Completá caravana, GDR y destino'); return; }
+  if(!p.gdr || !p.destino){ showToast('Completá GDR y destino'); return; }
+  if(dupConfirmar('pres', p.caravana)) return;
   const _er = edIdx('pres')!==null;
-  regGuardar('pres', {...p, caravana:p.caravana.trim()});
-  defSet('pres', p, CAMPOS_DEF_BOV);
+  regGuardar('pres', {...p, caravana:(p.caravana||'').trim()});
+  defSet('pres', p, CAMPOS_DEF_REP);
   window._presTmp = tmpFresh('pres');
   if(_er) showToast('Cambios guardados');
   render();
@@ -3259,15 +3403,61 @@ function defSet(ctx, obj, campos){
   const t = trabajoActual; if(!t) return;
   if(!t._def) t._def = {};
   const d = t._def[ctx] = t._def[ctx] || {};
-  campos.forEach(c=>{ if(obj[c]) d[c] = obj[c]; else delete d[c]; });
+  campos.forEach(c=>{ if(obj[c]) d[c] = Array.isArray(obj[c]) ? obj[c].slice() : obj[c]; else delete d[c]; });
 }
-function idTxt(x){ return String(x.caravana||'—') + (x.idTipo==='fuego' ? ' (fuego)' : ''); }
+const CAMPOS_DEF_REP = ['categoria','color','colorOtro','idTipo','aplicaciones','aplicOtra'];
+function defRepKey(ctx){ return ctx==='iatf' ? 'iatf_'+(iatfPaso||'') : ctx; }
+function idTxt(x){ return String(x.caravana||'sin caravana') + (x.idTipo==='fuego' ? ' (fuego)' : ''); }
 function bovSetIdTipo(tmp, v){ const d = window[tmp]; d.idTipo = (v==='fuego') ? 'fuego' : null; render(); }
+const TMP_CTX = {_diagTmp:'diag', _presTmp:'pres', _ginTmp:'gin', _iatfTmp:'iatf', _pesoTmp:'pesos'};
+function regsDeT(t, ctx){
+  const r = t.exploracionReproductiva || {};
+  if(ctx==='diag') return (r.diagnosticoGestacion||{}).registros||[];
+  if(ctx==='pres') return (r.preservicio||{}).registros||[];
+  if(ctx==='gin') return (r.examenGinecologico||{}).registros||[];
+  if(ctx==='iatf') return (r.servicio||{}).iatf||[];
+  if(ctx==='pesos') return (t.nutricion||{}).pesadas||[];
+  if(ctx==='andro') return androToros(t);
+  return [];
+}
+function dupCount(ctx, car, exceptIdx){
+  const c = String(car||'').trim().toLowerCase(); if(!c || !trabajoActual) return 0;
+  const t = trabajoActual;
+  const ei = (exceptIdx!==undefined) ? exceptIdx : edIdx(ctx);
+  let n = 0;
+  const cont = (regs, esActual)=>regs.forEach((x,i)=>{
+    if(esActual && ei===i) return;
+    if(ctx==='iatf' && x.etapa!==paso0()) return;
+    if(String(x.caravana||'').trim().toLowerCase()===c) n++;
+  });
+  try{ trabajosDeCadena(cadenaIdDe(t)).filter(x=>x.id!==t.id).forEach(x=>cont(regsDeT(x, ctx), false)); }catch(e){}
+  cont(ctx==='andro' ? androLista() : regsDe(ctx), true);
+  return n;
+}
+function dupLista(lista, i){
+  const c = String(lista[i].caravana||'').trim().toLowerCase(); if(!c) return;
+  if(lista.some((x,j)=>j!==i && String(x.caravana||'').trim().toLowerCase()===c)) showToast('⚠️ La caravana '+lista[i].caravana.trim()+' ya está en esta lista. Revisá que no sea un error.');
+}
+function dupMasAviso(el, wiz){
+  const c = el.value.trim().toLowerCase(), box = document.getElementById('dup_mas'); if(!box) return;
+  box.textContent = (c && wiz && wiz.animales.some(x=>String(x.caravana).trim().toLowerCase()===c)) ? '⚠️ La caravana '+el.value.trim()+' ya está cargada en este grupo.' : '';
+}
+function dupConfirmar(ctx, car, exceptIdx){
+  if(!dupCount(ctx, car, exceptIdx)) return false;
+  return !confirm('⚠️ La caravana '+String(car).trim()+' ya está cargada en esta pantalla. ¿La cargás igual?');
+}
+function dupAviso(tmp){
+  const ctx = TMP_CTX[tmp], el = document.getElementById('dup_'+tmp); if(!ctx || !el) return;
+  const car = window[tmp].caravana;
+  el.textContent = dupCount(ctx, car) ? '⚠️ La caravana '+String(car).trim()+' ya está cargada acá. Revisá que no sea un error.' : '';
+}
 function bovIdInput(tmp, extraOninput){
   const d = bovExtrasAsegurar(tmp);
   return `<div class="sectiontitle">Identificación</div>
     <div class="optrow"><div class="optbtn ${d.idTipo!=='fuego'?'selected':''}" onclick="bovSetIdTipo('${tmp}','caravana')">Caravana</div><div class="optbtn ${d.idTipo==='fuego'?'selected':''}" onclick="bovSetIdTipo('${tmp}','fuego')">Marca a fuego</div></div>
-    <input type="text" value="${escapeHtml(d.caravana||'')}" oninput="window['${tmp}'].caravana=this.value${extraOninput||''}" placeholder="${d.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">`;
+    <input type="text" value="${escapeHtml(d.caravana||'')}" oninput="window['${tmp}'].caravana=this.value${extraOninput||''}; dupAviso('${tmp}')" placeholder="${d.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
+    <div id="dup_${tmp}" class="fieldnote" style="color:var(--amber,#d9a21b); font-weight:600;"></div>
+    ${TMP_CTX[tmp] ? '<div class="fieldnote">Podés dejarla vacía y asignar la caravana al final con el bastón.</div>' : ''}`;
 }
 // selector caravana / marca a fuego sin re-render (para pantallas con campos de texto sin estado)
 window._idt = {};
@@ -3281,6 +3471,7 @@ window._ed = {}; window._fichaAb = {};
 const TMP_DE = {diag:'_diagTmp', pres:'_presTmp', gin:'_ginTmp', iatf:'_iatfTmp'};
 function regsDe(ctx){
   const t = trabajoActual, r = t.exploracionReproductiva;
+  if(ctx==='andro') return androLista();
   if(ctx==='diag') return r.diagnosticoGestacion.registros;
   if(ctx==='pres') return r.preservicio.registros;
   if(ctx==='gin') return r.examenGinecologico.registros;
@@ -3289,12 +3480,14 @@ function regsDe(ctx){
   return [];
 }
 function tmpFresh(ctx){
-  const d = defGet(ctx), pick = {};
-  CAMPOS_DEF_BOV.forEach(k=>{ if(d[k]) pick[k] = d[k]; });
-  if(ctx==='diag') return {caravana:'', resultado:null, subresultado:null, otro:'', ...bovExtrasVacios(), ...pick};
-  if(ctx==='pres') return {caravana:'', gdr:null, destino:null, destinoOtro:'', ...bovExtrasVacios(), ...pick};
-  if(ctx==='gin') return {caravana:'', texto:'', ...bovExtrasVacios(), ...pick};
-  if(ctx==='iatf') return {caravana:'', conDispositivo:null, pintada:null, toro: lsGet('iv_toro'), ...bovExtrasVacios(), ...pick};
+  const rep4 = ['diag','pres','gin','iatf'].includes(ctx);
+  const d = defGet(rep4 ? defRepKey(ctx) : ctx), pick = {};
+  (rep4 ? CAMPOS_DEF_REP : CAMPOS_DEF_BOV).forEach(k=>{ if(d[k]) pick[k] = Array.isArray(d[k]) ? d[k].slice() : d[k]; });
+  const mu = {muestra:false, muestraObs:''};
+  if(ctx==='diag') return {caravana:'', resultado:null, subresultado:null, otro:'', ...mu, ...bovExtrasVacios(), ...pick};
+  if(ctx==='pres') return {caravana:'', gdr:null, destino:null, destinoOtro:'', ...mu, ...bovExtrasVacios(), ...pick};
+  if(ctx==='gin') return {caravana:'', texto:'', ...mu, ...bovExtrasVacios(), ...pick};
+  if(ctx==='iatf') return {caravana:'', conDispositivo:null, pintada:null, obsProt:null, obsProtOtro:'', toro: lsGet('iv_toro'), ...mu, ...bovExtrasVacios(), ...pick};
   if(ctx==='pesos') return {caravana:'', categoria:pick.categoria||null, peso:'', cc:null, idTipo:pick.idTipo||null};
   return {};
 }
@@ -3322,7 +3515,28 @@ function regQuitar(ctx, i){
   if(!confirm('¿Quitar este animal de la lista?')) return;
   regsDe(ctx).splice(i,1); window._ed[ctx] = null; render();
 }
+function muestraKey(ctx, rec){ return ctx==='iatf' ? 'iatf_'+(rec.etapa||'') : ctx; }
+function muestraSig(key){ const t = trabajoActual; return (((t.muestraSeq||{})[key])||0)+1; }
+function bovMuestraWidget(tmp, ctx){
+  const d = window[tmp];
+  const key = ctx==='iatf' ? 'iatf_'+(iatfPaso||'') : ctx;
+  const ei = edIdx(ctx), previo = ei!==null ? regsDe(ctx)[ei] : null;
+  const n = (previo && previo.muestraN) ? previo.muestraN : muestraSig(key);
+  return `<div class="sectiontitle">Toma de muestra</div>
+    <div class="optrow"><div class="optbtn ${d.muestra?'selected':''}" onclick="window['${tmp}'].muestra=!window['${tmp}'].muestra; render()">Sí</div></div>
+    ${d.muestra ? `<div class="fieldnote"><b>Tubo N° ${n}</b></div>
+    <textarea rows="2" placeholder="Observaciones de la muestra (opcional)" oninput="window['${tmp}'].muestraObs=this.value">${escapeHtml(d.muestraObs||'')}</textarea>` : ''}`;
+}
 function regGuardar(ctx, rec){
+  if(['diag','pres','gin','iatf'].includes(ctx)){
+    const _i = edIdx(ctx), previo = _i!==null ? regsDe(ctx)[_i] : null;
+    if(rec.muestra){
+      if(previo && previo.muestraN) rec.muestraN = previo.muestraN;
+      else { const k = muestraKey(ctx, rec); if(!trabajoActual.muestraSeq) trabajoActual.muestraSeq = {}; rec.muestraN = muestraSig(k); trabajoActual.muestraSeq[k] = rec.muestraN; }
+      if(!rec.muestraObs) delete rec.muestraObs;
+    } else { delete rec.muestraN; delete rec.muestra; delete rec.muestraObs; }
+  }
+  const _e = bastonEidDe(rec.caravana); if(_e) rec.eid = _e;
   const regs = regsDe(ctx), i = edIdx(ctx);
   if(i!==null) regs[i] = rec; else regs.push(rec);
   window._ed[ctx] = null;
@@ -3338,10 +3552,11 @@ function detalleLineasReg(ctx, x){
   if(ctx==='gin') add('Observación', x.texto);
   if(ctx==='iatf'){ add('Paso', IATF_PASOS[x.etapa]); add('Fecha', fmtFecha(x.fecha)); add('Retiro', x.conDispositivo); add('Celo', x.pintada); add('Toro', x.toro); }
   if(ctx==='pesos'){ add('Peso', fmtNum(x.peso,1)+' kg'); if(x.prevPeso!==undefined) add('Anterior', fmtNum(x.prevPeso,1)+' kg ('+fmtFecha(x.prevFecha)+')'); if(x.gdp!==undefined) add('Ganancia diaria', fmtNum(x.gdp,2)+' kg/día'); }
-  add('Color', bovColorTxt(x)); if(ctx!=='pesos' || x.cc) add('Condición corporal', x.cc); add('Aplicaciones', aplicTxt(x)); add('Veterinario actuante', x.vet);
+  add('Color', bovColorTxt(x)); if(ctx!=='pesos' || x.cc) add('Condición corporal', x.cc); add('Aplicaciones', aplicTxt(x)); add('Observaciones', obsProtTxt(x)); add('Toma de muestra', muestraTxt(x)); add('Veterinario actuante', x.vet);
   return L;
 }
 function resumenCortoReg(ctx, x){
+  if(ctx==='andro') return x.cc ? 'CC '+x.cc : '';
   if(ctx==='diag') return (x.resultado||'')+(x.subresultado?' ('+x.subresultado+')':'');
   if(ctx==='pres') return 'GDR '+(x.gdr||'—')+' · '+(((x.destino==='Otro'||x.destino==='Otra')?(x.destinoOtro||'Otro'):x.destino)||'—');
   if(ctx==='gin') return (x.texto||'').slice(0,30);
@@ -3350,11 +3565,58 @@ function resumenCortoReg(ctx, x){
   return '';
 }
 function toggleFicha(k){ window._fichaAb[k] = !window._fichaAb[k]; const el = document.getElementById('fic_'+k); if(el) el.style.display = window._fichaAb[k] ? '' : 'none'; }
+function asigSinCar(ctx, filtro){ return regsDe(ctx).map((x,i)=>({x,i})).filter(o=>!String(o.x.caravana||'').trim() && (!filtro || filtro(o.x))); }
+window._asig = null;
+function asigAbrir(ctx, etapa){
+  const filtro = ctx==='iatf' ? (x=>x.etapa===etapa) : null;
+  window._asig = {ctx, etapa:etapa||null, excl:{}};
+  if(document.getElementById('asigOverlay')) return;
+  const ov = document.createElement('div'); ov.id = 'asigOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:100; display:flex; align-items:center; justify-content:center; padding:16px;';
+  document.body.appendChild(ov); asigDibujar();
+}
+function asigLecturas(){
+  const vistos = {}, out = [];
+  bastonGet().forEach((x,i)=>{ if(x.usada) return; const k = (x.eid||x.tag).replace(/\s+/g,''); if(vistos[k]) return; vistos[k] = 1; out.push({x, i}); });
+  return out.filter(o=>!window._asig.excl[o.i]);
+}
+function asigDibujar(){
+  const ov = document.getElementById('asigOverlay'); if(!ov) return;
+  const a = window._asig, filtro = a.ctx==='iatf' ? (x=>x.etapa===a.etapa) : null;
+  const regs = asigSinCar(a.ctx, filtro), lect = asigLecturas();
+  const n = Math.max(regs.length, lect.length);
+  let filas = '';
+  for(let k=0;k<n;k++){
+    const r = regs[k], l = lect[k];
+    filas += `<div class="listcard" style="cursor:default;"><div class="meta"><b>${r?('Animal '+(k+1)+(resumenCortoReg(a.ctx,r.x)?' · '+escapeHtml(resumenCortoReg(a.ctx,r.x)):'')):'— (sin animal)'}</b></div>
+      <div class="meta">${l?('📡 '+escapeHtml(l.x.tag)+' <span class="fieldnote">'+escapeHtml(l.x.eid||'')+' · '+escapeHtml((l.x.hora||'').slice(0,5))+'</span> <button class="btn btn-outline" style="width:auto; margin:0 0 0 6px; padding:2px 10px; font-size:12px;" onclick="asigExcluir('+l.i+')">✕ sacar lectura</button>'):'— (sin lectura)'}</div></div>`;
+  }
+  ov.innerHTML = `<div style="background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; max-width:460px; width:100%; max-height:90vh; overflow-y:auto;">
+    <div class="sectiontitle" style="margin-top:0;">📡 Adjuntar lecturas del bastón</div>
+    <div class="fieldnote">Cada animal sin caravana se empareja con la lectura del mismo número de orden. Revisá que coincidan antes de confirmar.</div>
+    ${regs.length!==lect.length ? `<div class="alertcard">⚠️ Hay ${regs.length} animales sin caravana y ${lect.length} lecturas. Se asignan solo las primeras ${Math.min(regs.length,lect.length)}. Podés sacar lecturas repetidas o de más.</div>` : ''}
+    ${lect.length ? '' : '<div class="fieldnote">No hay lecturas pendientes. Cargá la lista del bastón primero.</div><button class="btn btn-outline" onclick="asigCerrar(); window._bastonInput=null; bastonAbrir()">📡 Cargar lista del bastón</button>'}
+    ${filas}
+    ${Math.min(regs.length,lect.length) ? `<button class="btn btn-green" onclick="asigConfirmar()">Confirmar ${Math.min(regs.length,lect.length)} asignaciones</button>` : ''}
+    <button class="btn btn-teal" style="margin-top:8px;" onclick="asigCerrar()">Cerrar</button></div>`;
+}
+function asigExcluir(i){ window._asig.excl[i] = true; asigDibujar(); }
+function asigCerrar(){ const o = document.getElementById('asigOverlay'); if(o) o.remove(); window._asig = null; render(); }
+function asigConfirmar(){
+  const a = window._asig, filtro = a.ctx==='iatf' ? (x=>x.etapa===a.etapa) : null;
+  const regs = asigSinCar(a.ctx, filtro), lect = asigLecturas(), n = Math.min(regs.length, lect.length), bl = bastonGet();
+  for(let k=0;k<n;k++){ regs[k].x.caravana = lect[k].x.tag; if(lect[k].x.eid) regs[k].x.eid = lect[k].x.eid; bl[lect[k].i].usada = true; }
+  bastonSet(bl);
+  showToast(n+' caravanas asignadas');
+  asigCerrar();
+}
 function listaAnimalesCtx(ctx, filtro, titulo){
   const regs = regsDe(ctx);
+  const sinCar = asigSinCar(ctx, filtro).length;
+  const btnAsig = sinCar ? `<button class="btn btn-amber" onclick="asigAbrir('${ctx}', ${ctx==='iatf'?"iatfPaso":'null'})">📡 Adjuntar lecturas del bastón (${sinCar} sin caravana)</button>` : '';
   const items = regs.map((x,i)=>({x,i})).filter(o=>!filtro || filtro(o.x)).reverse();
   if(!items.length) return '';
-  return `<div class="sectiontitle">${titulo||'Cargados'} (${items.length})</div>` + items.map(o=>{
+  return `<div class="sectiontitle">${titulo||'Cargados'} (${items.length})</div>` + btnAsig + items.map(o=>{
     const k = ctx+'_'+o.i, ab = !!window._fichaAb[k], editable = !(ctx==='iatf' && !o.x.etapa);
     return `<div class="listcard" style="cursor:pointer;" onclick="toggleFicha('${k}')">
       <div class="meta"><b>${escapeHtml(idTxt(o.x))}</b>${o.x.categoria?' · '+escapeHtml(o.x.categoria):''}${resumenCortoReg(ctx,o.x)?' · '+escapeHtml(resumenCortoReg(ctx,o.x)):''}<span style="float:right;">▾</span></div>
@@ -3412,12 +3674,16 @@ function iatfContexto(){
   });
   return out;
 }
+const OBS_PROT = ['Preñada','Descarte por GDR','Pasa al siguiente sincro','Otro'];
+function obsProtTxt(x){ return x.obsProt ? (x.obsProt==='Otro' ? (x.obsProtOtro||'Otro') : x.obsProt) : ''; }
+function muestraTxt(x){ return x.muestraN ? 'Tubo '+x.muestraN+(x.muestraObs?' — '+x.muestraObs:'') : ''; }
 const IATF_ORDEN = {colocacion:1, retiro:2, inseminacion:3};
 function iatfPendientes(paso){
   // animales cuya última etapa registrada es la anterior a 'paso'
   const previa = paso==='retiro' ? 'colocacion' : 'retiro';
   const por = {};
   iatfContexto().forEach(r=>{
+    if(!r.caravana) return;
     const k = r.caravana;
     const ult = por[k];
     if(!ult || (r.fecha||'') > (ult.fecha||'') || ((r.fecha||'')===(ult.fecha||'') && IATF_ORDEN[r.etapa] >= IATF_ORDEN[ult.etapa])) por[k] = r;
@@ -3493,6 +3759,10 @@ function subServicioIatf(r){
     `;
   }
   let campos = '';
+  if(iatfPaso==='colocacion'){
+    campos = `<div class="sectiontitle">Observaciones</div><div class="optrow" style="flex-wrap:wrap;">${OBS_PROT.map(o=>`<div class="optbtn ${it.obsProt===o?'selected':''}" onclick="window._iatfTmp.obsProt = (window._iatfTmp.obsProt==='${o}'?null:'${o}'); render()">${o}</div>`).join('')}</div>
+      ${it.obsProt==='Otro' ? `<input type="text" value="${escapeHtml(it.obsProtOtro||'')}" oninput="window._iatfTmp.obsProtOtro=this.value" placeholder="Escribí la observación">` : ''}`;
+  }
   if(iatfPaso==='retiro'){
     campos = `<div class="sectiontitle">Retiro</div><div class="optrow">${['Con dispositivo','Sin dispositivo'].map(o=>`<div class="optbtn ${it.conDispositivo===o?'selected':''}" onclick="window._iatfTmp.conDispositivo = (window._iatfTmp.conDispositivo==='${o}'?null:'${o}'); render()">${o}</div>`).join('')}</div>`;
   } else if(iatfPaso==='inseminacion'){
@@ -3514,6 +3784,7 @@ function subServicioIatf(r){
     ${campos}
     ${bovExtrasTop('_iatfTmp')}
     ${bovExtrasAplic('_iatfTmp')}
+    ${bovMuestraWidget('_iatfTmp','iatf')}
     ${vetWidget('iatf')}
     <button class="btn btn-green" style="margin-top:10px;" onclick="agregarIatfRegistro()">${edIdx('iatf')!==null?'Guardar cambios':(iatfPaso==='colocacion'?'+ Agregar y siguiente animal':'Guardar y volver a buscar')}</button>
     ${listaCargados}
@@ -3527,25 +3798,30 @@ function subServicioIatf(r){
 }
 function iatfDetalle(x){
   const p = [];
+  if(obsProtTxt(x)) p.push(obsProtTxt(x).toLowerCase());
+  if(muestraTxt(x)) p.push(muestraTxt(x));
   if(x.etapa==='retiro' && x.conDispositivo) p.push(x.conDispositivo.toLowerCase());
   if(x.etapa==='inseminacion'){ if(x.pintada) p.push(x.pintada.toLowerCase()); if(x.toro) p.push('toro '+x.toro); }
   const ex = bovExtrasLinea(x); if(ex) p.push(ex.slice(2));
   if(x.vet) p.push('veterinario actuante: '+x.vet);
   return p.join(', ') || '—';
 }
+function paso0(){ const i = edIdx('iatf'); return i!==null ? regsDe('iatf')[i].etapa : iatfPaso; }
 function agregarIatfRegistro(){
   const it = window._iatfTmp;
   if(!it.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
-  if(!it.caravana || !it.caravana.trim()){ showToast('Falta la caravana'); return; }
+  if((!it.caravana || !it.caravana.trim()) && iatfPaso!=='colocacion'){ showToast('Falta la caravana'); return; }
+  if(dupConfirmar('iatf', it.caravana)) return;
   const ei = edIdx('iatf'), previo = ei!==null ? regsDe('iatf')[ei] : null;
-  const rec = {...(previo||{}), etapa: previo ? previo.etapa : iatfPaso, fecha: previo ? previo.fecha : hoyISO(), caravana:it.caravana.trim(), categoria:it.categoria, color:it.color, colorOtro:it.colorOtro, cc:it.cc, aplicaciones:it.aplicaciones, aplicOtra:it.aplicOtra};
+  const rec = {...(previo||{}), etapa: previo ? previo.etapa : iatfPaso, fecha: previo ? previo.fecha : hoyISO(), caravana:(it.caravana||'').trim(), categoria:it.categoria, color:it.color, colorOtro:it.colorOtro, cc:it.cc, aplicaciones:it.aplicaciones, aplicOtra:it.aplicOtra, muestra:it.muestra, muestraObs:it.muestraObs};
   if(it.idTipo==='fuego') rec.idTipo = 'fuego'; else delete rec.idTipo;
+  if(paso0()==='colocacion'){ if(it.obsProt){ rec.obsProt = it.obsProt; if(it.obsProt==='Otro') rec.obsProtOtro = (it.obsProtOtro||'').trim(); else delete rec.obsProtOtro; } else { delete rec.obsProt; delete rec.obsProtOtro; } }
   const paso = rec.etapa;
   if(paso==='retiro'){ if(it.conDispositivo) rec.conDispositivo = it.conDispositivo; else delete rec.conDispositivo; }
   if(paso==='inseminacion'){ if(it.pintada) rec.pintada = it.pintada; else delete rec.pintada; if(it.toro){ rec.toro = it.toro; lsSet('iv_toro', it.toro); } else delete rec.toro; }
   const v = vetLeer('iatf'); if(v) rec.vet = v; else delete rec.vet;
   regGuardar('iatf', rec);
-  defSet('iatf', it, CAMPOS_DEF_BOV);
+  defSet(defRepKey('iatf'), it, CAMPOS_DEF_REP);
   if(!previo && paso==='retiro') eventoAgrupado('iatf-ia', sumarDias(rec.fecha,2), 'Inseminación IATF (retiro + 48 hs)');
   window._iatfTmp = iatfTmpNuevo();
   if(paso!=='colocacion'){ iatfSel = null; iatfBusq = ''; }
@@ -3600,6 +3876,7 @@ function subExamenGinecologico(r){
     <label>Observación</label>
     <textarea id="gin_texto" oninput="window._ginTmp.texto=this.value" placeholder="Lo que encontrás...">${escapeHtml(g.texto)}</textarea>
     ${bovExtrasAplic('_ginTmp')}
+    ${bovMuestraWidget('_ginTmp','gin')}
     <button class="btn btn-green" onclick="agregarGinRegistro()">${edIdx('gin')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
     ${listaAnimalesCtx('gin')}
   `;
@@ -3607,10 +3884,10 @@ function subExamenGinecologico(r){
 function agregarGinRegistro(){
   const g = window._ginTmp;
   if(!g.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
-  if(!g.caravana){ showToast('Falta la caravana'); return; }
+  if(dupConfirmar('gin', g.caravana)) return;
   const _er = edIdx('gin')!==null;
-  regGuardar('gin', {...g, caravana:g.caravana.trim()});
-  defSet('gin', g, CAMPOS_DEF_BOV);
+  regGuardar('gin', {...g, caravana:(g.caravana||'').trim()});
+  defSet('gin', g, CAMPOS_DEF_REP);
   window._ginTmp = tmpFresh('gin');
   if(_er) showToast('Cambios guardados');
   render();
@@ -3637,7 +3914,8 @@ function androToros(t){
 }
 const AN_DEF = ['raza','edad','color','colorOtro','idTipo'];
 function androVacio(a){ if(!a) return true; return !Object.keys(a).some(k=>!AN_DEF.includes(k) && hasData(a[k])); }
-function androFalta(a){ const f = []; if(!a.caravana || !String(a.caravana).trim()) f.push('la identificación'); if(!a.cc) f.push('la condición corporal'); return f; }
+function androFalta(a){ const f = []; if(!a.cc) f.push('la condición corporal'); return f; }
+function androDupConfirmar(a, idx){ return a && a.caravana && dupConfirmar('andro', a.caravana, idx); }
 function androNuevo(){
   const l = androLista(), d = defGet('andro'), n = {};
   AN_DEF.forEach(k=>{ if(d[k]) n[k] = d[k]; });
@@ -3653,7 +3931,7 @@ function androVolverLista(){
     else {
       const f = androFalta(a);
       if(f.length){ if(!confirm('Falta '+f.join(' y ')+'. ¿Descartar este toro?')) return; l.splice(androIdx,1); }
-      else defSet('andro', a, AN_DEF);
+      else { if(androDupConfirmar(a, androIdx)) return; defSet('andro', a, AN_DEF); }
     }
   }
   androIdx = null;
@@ -3663,6 +3941,7 @@ function androGuardarSiguiente(){
   const a = androLista()[androIdx];
   const f = androFalta(a);
   if(f.length){ showToast('Falta '+f.join(' y ')); return; }
+  if(androDupConfirmar(a, androIdx)) return;
   defSet('andro', a, AN_DEF);
   androNuevo();
 }
@@ -3714,6 +3993,7 @@ function catAndrologico(){
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
     <div class="sectiontitle">Examen andrológico (${lista.filter(a=>!androVacio(a)).length} ${lista.filter(a=>!androVacio(a)).length===1?'toro':'toros'})</div>
+    ${asigSinCar('andro').length ? `<button class="btn btn-amber" onclick="asigAbrir('andro', null)">📡 Adjuntar lecturas del bastón (${asigSinCar('andro').length} sin caravana)</button>` : ''}
     ${androFichasHTML(lista, -1, 'androAbrir')}
     <button class="btn btn-green" style="margin-top:14px;" onclick="androNuevo()">+ Nuevo toro</button>
     ${botonGuardarSimple('guardarAndrologico')}
@@ -3724,9 +4004,11 @@ function catAndrologicoForm(a, i){
   return `
     <button class="backbtn" onclick="androVolverLista()">‹ Lista de toros</button>
     <div class="sectiontitle">Toro ${i+1}</div>
-    <div class="sectiontitle">Identificación (obligatoria)</div>
+    <div class="sectiontitle">Identificación</div>
     <div class="optrow"><div class="optbtn ${a.idTipo!=='fuego'?'selected':''}" onclick="setAndrologico('idTipo',null)">Caravana</div><div class="optbtn ${a.idTipo==='fuego'?'selected':''}" onclick="setAndrologico('idTipo','fuego')">Marca a fuego</div></div>
     <input type="text" id="an_caravana" value="${escapeHtml(a.caravana||'')}" oninput="anSetCampo('caravana',this.value)" placeholder="${a.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
+    <div id="dup_an" class="fieldnote" style="color:var(--amber,#d9a21b); font-weight:600;"></div>
+    <div class="fieldnote">Podés dejarla vacía y asignar la caravana al final con el bastón.</div>
     <label>Color</label>
     <div class="optrow" style="flex-wrap:wrap;">${BOV_COLORES.map(c=>`<div class="optbtn ${a.color===c?'selected':''}" onclick="setAndrologico('color','${c}')">${c}</div>`).join('')}</div>
     ${a.color==='Otro' ? `<input type="text" value="${escapeHtml(a.colorOtro||'')}" oninput="anSetCampo('colorOtro',this.value)" placeholder="¿Qué color?">` : ''}
@@ -3772,7 +4054,8 @@ function anActual(){
   const l = androLista();
   return (androIdx!==null) ? l[androIdx] : null;
 }
-function anSetCampo(campo,valor){ const a=anActual(); if(a) a[campo]=valor; }
+function anSetCampo(campo,valor){ const a=anActual(); if(a) a[campo]=valor;
+  if(campo==='caravana'){ const el = document.getElementById('dup_an'); if(el) el.textContent = dupCount('andro', valor, androIdx) ? '⚠️ La caravana '+String(valor).trim()+' ya está cargada acá. Revisá que no sea un error.' : ''; } }
 function anSetTexto(campo,valor){
   const a=anActual(); if(!a) return;
   if(!a[campo]) a[campo]={texto:'',fotos:[]};
@@ -3866,7 +4149,7 @@ function renderTubosBovinoList(){
   el.innerHTML = window._tubosBovinoTmp.map((t,i)=>`
     <div class="animalrow">
       <span class="tubolab">N°${i+1}</span>
-      <input type="text" placeholder="Caravana" value="${escapeHtml(t.caravana)}" onchange="window._tubosBovinoTmp[${i}].caravana=this.value">
+      <input type="text" placeholder="Caravana" value="${escapeHtml(t.caravana)}" onchange="window._tubosBovinoTmp[${i}].caravana=this.value; dupLista(window._tubosBovinoTmp, ${i})">
       ${bovColorSelectFila('window._tubosBovinoTmp', i, t)}
       ${window._tubosBovinoTmp.length>1 ? `<button class="removeanimal" onclick="quitarTuboBovino(${i})">✕</button>` : ''}
     </div>`).join('');
@@ -4248,6 +4531,7 @@ function agregarAnimalTratMasiva(categoria){
   const inputObs = document.getElementById('tratm_obs_input');
   const caravana = inputCar ? inputCar.value.trim() : '';
   if(!caravana) return;
+  if(tratMasivaWizard.animales.some(x=>String(x.caravana).trim().toLowerCase()===caravana.toLowerCase()) && !confirm('⚠️ La caravana '+caravana+' ya está cargada en este grupo. ¿La cargás igual?')) return;
   const observacion = inputObs ? inputObs.value.trim() : '';
   tratMasivaWizard.animales.push({caravana, ...bovColorGet('tratm'), categoria, observacion});
   render();
@@ -4283,7 +4567,8 @@ function catTratMasivaWizardView(){
     <button class="backbtn" onclick="tratMasivaWizard.step='descripcion'; render()">‹ Volver</button>
     <div class="sectiontitle">${escapeHtml(w.descripcion)}</div>
     <label>Caravana</label>
-    <input type="text" id="tratm_caravana_input" placeholder="Número de caravana" inputmode="numeric">
+    <input type="text" id="tratm_caravana_input" placeholder="Número de caravana" inputmode="numeric" oninput="dupMasAviso(this, tratMasivaWizard)">
+    <div id="dup_mas" class="fieldnote" style="color:var(--amber,#d9a21b); font-weight:600;"></div>
     ${bovColorWidget('tratm')}
     <label>Observación (opcional)</label>
     <input type="text" id="tratm_obs_input" placeholder="Ej: propietario, algún dato de este animal...">
@@ -4371,6 +4656,7 @@ function agregarAnimalVacMasiva(categoria){
   const input = document.getElementById('vacm_caravana_input');
   const val = input ? input.value.trim() : '';
   if(!val) return;
+  if(vacMasivaWizard.animales.some(x=>String(x.caravana).trim().toLowerCase()===val.toLowerCase()) && !confirm('⚠️ La caravana '+val+' ya está cargada en este grupo. ¿La cargás igual?')) return;
   vacMasivaWizard.animales.push({caravana: val, ...bovColorGet('vacm'), categoria});
   render();
   setTimeout(()=>{ const el=document.getElementById('vacm_caravana_input'); if(el){ el.value=''; el.focus(); } }, 0);
@@ -4423,7 +4709,8 @@ function catVacMasivaWizardView(){
       <button class="backbtn" onclick="vacMasivaWizard.step='vacunas'; render()">‹ Volver</button>
       <div class="sectiontitle">${labelVacunaGrupo(w)}</div>
       <label>Caravana</label>
-      <input type="text" id="vacm_caravana_input" placeholder="Número de caravana" inputmode="numeric">
+      <input type="text" id="vacm_caravana_input" placeholder="Número de caravana" inputmode="numeric" oninput="dupMasAviso(this, vacMasivaWizard)">
+      <div id="dup_mas" class="fieldnote" style="color:var(--amber,#d9a21b); font-weight:600;"></div>
       ${bovColorWidget('vacm')}
       <div class="fieldnote" style="margin:6px 0;">Tocá la categoría del animal para guardarlo y pasar al siguiente.</div>
       <div class="optrow" style="flex-wrap:wrap;">${SANIDAD_CATEGORIAS_BOVINO.map(c=>`<div class="optbtn" onclick="agregarAnimalVacMasiva('${c}')">${c}</div>`).join('')}</div>
@@ -4524,7 +4811,7 @@ function renderSanMasivoList(){
   const el = document.getElementById('sanMasivoList'); if(!el) return;
   el.innerHTML = window._sanMasivoTmp.map((f,i)=>`
     <div class="animalrow">
-      <input type="text" placeholder="Caravana" value="${escapeHtml(f.caravana)}" onchange="window._sanMasivoTmp[${i}].caravana=this.value">
+      <input type="text" placeholder="Caravana" value="${escapeHtml(f.caravana)}" onchange="window._sanMasivoTmp[${i}].caravana=this.value; dupLista(window._sanMasivoTmp, ${i})">
       ${bovColorSelectFila('window._sanMasivoTmp', i, f)}
       <input type="text" placeholder="Producto" value="${escapeHtml(f.producto)}" onchange="window._sanMasivoTmp[${i}].producto=this.value">
       <input type="text" placeholder="Dosis" value="${escapeHtml(f.dosis)}" onchange="window._sanMasivoTmp[${i}].dosis=this.value">
@@ -5251,7 +5538,7 @@ function statsHTMLReproductiva(trabs){
     h += sTitulo('Preservicio') + sCards([{n:pres.length, lab:'animales evaluados'}]);
     h += sBar('GDR (grado de desarrollo reproductivo)', sItems(sCuenta(pres.map(x=>x.gdr)), ['1','2','3','4']).map(i=>({label:'GDR '+i.label, n:i.n})), pres.length);
     const dest = sCuenta(pres.map(x=> (x.destino==='Otro'||x.destino==='Otra') ? 'Otro' : x.destino));
-    h += sBar('Destino', sItems(dest, ['IATF','Servicio natural','Descarte','Otro'].filter(k=>dest[k])), pres.length);
+    h += sBar('Destino', sItems(dest, ['IATF','Servicio natural','Descarte','Preñada','Otro'].filter(k=>dest[k])), pres.length);
     const otros = pres.filter(x=>(x.destino==='Otro'||x.destino==='Otra') && x.destinoOtro).map(x=>`${sApi(x.f)} — caravana ${x.caravana}: ${x.destinoOtro}`);
     h += sLista(otros);
     const cat = sCuenta(pres.map(x=>x.categoria)); if(Object.keys(cat).length) h += sBar('Por categoría', sItems(cat));
@@ -5775,7 +6062,7 @@ function mkBarras(titulo, items){
   if(!items.length) return '';
   return `@@G ${mkC(titulo)}|${items.map(i=>mkC(i.label).replace(/:/g,'·')+':'+i.n).join('|')}\n`;
 }
-function idCols(x){ return x.idTipo==='fuego' ? ['', x.caravana||'—'] : [x.caravana||'—','']; }
+function idCols(x){ return x.idTipo==='fuego' ? ['', x.caravana||'—'] : [x.caravana||'sin asignar','']; }
 const ID_COLS = ['Caravana','Marca a fuego'];
 function mkParse(txt){
   const out = []; let cur = null, buf = [];
@@ -5890,7 +6177,7 @@ function resumenTrabajoBovino(t){
       const pren = dg.registros.filter(x=>x.resultado==='Preñada').length;
       const vac = dg.registros.filter(x=>x.resultado==='Vacía').length;
       out += `  Diagnóstico de gestación: ${dg.registros.length} animales (${pren} preñadas, ${vac} vacías)\n`;
-      out += mkTabla('Diagnóstico de gestación', [...ID_COLS,'Categoría','Color','CC','Resultado','Aplicaciones'], dg.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', (x.resultado||'—')+(x.subresultado?' ('+x.subresultado+')':'')+(x.otro?', '+x.otro:''), aplicTxt(x)]));
+      out += mkTabla('Diagnóstico de gestación', [...ID_COLS,'Categoría','Color','CC','Resultado','Aplicaciones','Toma de muestra'], dg.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', (x.resultado||'—')+(x.subresultado?' ('+x.subresultado+')':'')+(x.otro?', '+x.otro:''), aplicTxt(x), muestraTxt(x)]));
       out += mkBarras('Diagnóstico de gestación', [{label:'Preñadas', n:pren},{label:'Vacías', n:vac}]);
       out += mkBarras('Preñadas según ubicación', ['Cabeza','Cuerpo','Cola'].map(k=>({label:k, n:dg.registros.filter(x=>x.resultado==='Preñada' && x.subresultado===k).length})));
       if(dg.comentario) out += `    Comentario: ${dg.comentario}\n`;
@@ -5898,7 +6185,7 @@ function resumenTrabajoBovino(t){
     if(r.preservicio && r.preservicio.registros && r.preservicio.registros.length){
       out += `  Preservicio: ${r.preservicio.registros.length} animales\n`;
       const _pr = r.preservicio.registros, _dest = x=>(x.destino==='Otra'||x.destino==='Otro')?(x.destinoOtro||'Otro'):(x.destino||'');
-      out += mkTabla('Preservicio', [...ID_COLS,'Categoría','Color','CC','GDR','Destino','Aplicaciones'], _pr.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.gdr||'', _dest(x), aplicTxt(x)]));
+      out += mkTabla('Preservicio', [...ID_COLS,'Categoría','Color','CC','GDR','Destino','Aplicaciones','Toma de muestra'], _pr.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.gdr||'', _dest(x), aplicTxt(x), muestraTxt(x)]));
       out += mkBarras('Distribución de GDR', sItems(sCuenta(_pr.map(x=>x.gdr)), Object.keys(sCuenta(_pr.map(x=>x.gdr))).sort()).map(i=>({label:'GDR '+i.label, n:i.n})));
       out += mkBarras('Destino', sItems(sCuenta(_pr.map(_dest))));
     }
@@ -5911,7 +6198,7 @@ function resumenTrabajoBovino(t){
         if(_et.length){
           const _s = _et.slice().sort((a,b)=> String(a.caravana).localeCompare(String(b.caravana), undefined, {numeric:true}) || (IATF_ORDEN[a.etapa]-IATF_ORDEN[b.etapa]));
           const _det = x=>{ const p = []; if(x.etapa==='retiro' && x.conDispositivo) p.push(x.conDispositivo); if(x.etapa==='inseminacion'){ if(x.pintada) p.push(x.pintada); if(x.toro) p.push('toro '+x.toro); } if(x.vet) p.push('vet: '+x.vet); return p.join(', '); };
-          out += mkTabla('IATF', [...ID_COLS,'Categoría','Color','CC','Paso','Fecha','Detalle','Aplicaciones'], _s.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', IATF_PASOS[x.etapa], fmtFecha(x.fecha), _det(x), aplicTxt(x)]));
+          out += mkTabla('IATF', [...ID_COLS,'Categoría','Color','CC','Paso','Fecha','Detalle','Observaciones','Aplicaciones','Toma de muestra'], _s.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', IATF_PASOS[x.etapa], fmtFecha(x.fecha), _det(x), obsProtTxt(x), aplicTxt(x), muestraTxt(x)]));
           out += mkBarras('Animales por paso de IATF', Object.keys(IATF_PASOS).map(k=>({label:IATF_PASOS[k], n:new Set(_et.filter(x=>x.etapa===k).map(x=>x.caravana)).size})));
         }
       }
@@ -5919,7 +6206,7 @@ function resumenTrabajoBovino(t){
     }
     if(r.examenGinecologico && r.examenGinecologico.registros && r.examenGinecologico.registros.length){
       out += `  Examen ginecológico: ${r.examenGinecologico.registros.length} animales\n`;
-      out += mkTabla('Examen ginecológico', [...ID_COLS,'Categoría','Color','CC','Hallazgos','Aplicaciones'], r.examenGinecologico.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.texto||'', aplicTxt(x)]));
+      out += mkTabla('Examen ginecológico', [...ID_COLS,'Categoría','Color','CC','Hallazgos','Aplicaciones','Toma de muestra'], r.examenGinecologico.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.texto||'', aplicTxt(x), muestraTxt(x)]));
     }
     if(r.observacion) out += `  Observación general: ${r.observacion}\n`;
   }
