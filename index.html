@@ -246,6 +246,7 @@ const PODAL_MIEMBROS = [
 const PODAL_PROCEDIMIENTOS_FULL = ['Desvasado funcional','Lavaje','Amputación','Cauterización','Colocación de sulfato de cobre','Vendaje','Antibiótico terapia','Antiinflamatorio'];
 const PODAL_ANTIBIOTICOS = ['Ceftiofur','Ceftiofur LA','Tilmicosina'];
 const PODAL_ANTIINF = ['Flunixin','Dexametasona','Ketoprofeno'];
+const PODAL_VENDAJE = ['Retiro en 3 días','Cambio en 3 días'];
 const SANIDAD_CATEGORIAS_BOVINO = ['Toro','Vaca','Vaquillona','Torito','Novillo','Ternero','Ternera'];
 const SANIDAD_VACUNAS_BOVINO = ['Complejo respiratorio y queratoconjuntivitis','Clostridiales','Neonatal','Reproductiva','Diarrea viral bovina','Triple','Otra'];
 const MUESTRA_TIPOS = [
@@ -1177,7 +1178,7 @@ function bastonInyectar(){
   main.querySelectorAll('input[type=text]').forEach(inp=>{
     if(inp.dataset.bast || inp.classList.contains('searchbar')) return;
     const ph = (inp.getAttribute('placeholder')||'');
-    if(!/^(N° de caravana|Número de caravana|Marca a fuego|Caravana|Ej: 245)$/i.test(ph)) return;
+    if(!/^(N° de caravana|Número de caravana|Marca a fuego|Tatuaje|Caravana|Ej: 245)$/i.test(ph)) return;
     inp.dataset.bast = '1';
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'btn btn-outline';
@@ -2915,7 +2916,7 @@ function agregarPesada(){
   const fecha = previo ? previo.fecha : hoyISO();
   const h = pesadasHistorial(car).filter(x=>x.fecha<fecha);
   const rec = {caravana:car, categoria:d.categoria, peso, fecha};
-  if(d.idTipo==='fuego') rec.idTipo = 'fuego';
+  if(d.idTipo) rec.idTipo = d.idTipo;
   if(d.cc) rec.cc = d.cc;
   if(h.length){
     const prev = h[h.length-1], first = h[0];
@@ -2966,8 +2967,8 @@ function catNutricionBovino(){
       <div class="sectiontitle">Control de pesos (${lista.length} cargados)</div>
       ${edBanner('pesos')}
       <div class="sectiontitle">Identificación</div>
-      <div class="optrow"><div class="optbtn ${d.idTipo!=='fuego'?'selected':''}" onclick="window._pesoTmp.idTipo=null; render()">Caravana</div><div class="optbtn ${d.idTipo==='fuego'?'selected':''}" onclick="window._pesoTmp.idTipo='fuego'; render()">Marca a fuego</div></div>
-      <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._pesoTmp.caravana=this.value; pesoHintActualizar(); dupAviso('_pesoTmp')" placeholder="${d.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
+      <div class="optrow">${idBotones(d.idTipo, v=>`window._pesoTmp.idTipo=${v?`'${v}'`:'null'}; idTipoGuardarDef(window._pesoTmp.idTipo); render()`)}</div>
+      <input type="text" value="${escapeHtml(d.caravana)}" oninput="window._pesoTmp.caravana=this.value; pesoHintActualizar(); dupAviso('_pesoTmp')" placeholder="${idPh(d.idTipo)}">
       <div id="dup__pesoTmp" class="fieldnote" style="color:var(--amber,#d9a21b); font-weight:600;"></div>
       <div class="fieldnote" id="peso_hint">${escapeHtml(pesoHintHTML(d.caravana.trim()))}</div>
       <div class="sectiontitle">Categoría</div>
@@ -3156,7 +3157,7 @@ function guardarReproductivaBovinoFinal(estado){
 const BOV_COLORES = ['Blanco','Rojo','Azul','Celeste','Amarillo','Verde','Otro'];
 const BOV_APLICACIONES = ['Bullsynch','Vacuna reproductiva','Vedevax','Prostaglandina','Benzoato de estradiol','Dispositivo','Folirec','GnRH','Buserelina','Minerales','Observaciones'];
 const BOV_CATS_REPRO = ['Vaca','Vaquillona'];
-function bovExtrasVacios(){ return {idTipo:null, categoria:null, color:null, colorOtro:'', cc:null, aplicaciones:[], aplicOtra:''}; }
+function bovExtrasVacios(){ return {idTipo:idTipoDef(), categoria:null, color:null, colorOtro:'', cc:null, aplicaciones:[], aplicOtra:''}; }
 function bovSetCat(tmp, v){ const d=window[tmp]; d.categoria = (d.categoria===v ? null : v); render(); }
 function bovCatSel(tmp){
   const d = bovExtrasAsegurar(tmp);
@@ -3277,6 +3278,7 @@ function subDiagnosticoGestacion(r){
     <input type="text" value="${escapeHtml(d.otro)}" oninput="window._diagTmp.otro=this.value" placeholder="Algún detalle extra">
     ${bovExtrasAplic('_diagTmp')}
     ${bovMuestraWidget('_diagTmp','diag')}
+    ${bovObsWidget('_diagTmp')}
     <button class="btn btn-green" onclick="agregarDiagRegistro()">${edIdx('diag')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
     ${listaAnimalesCtx('diag')}
     <label style="margin-top:22px;">Comentario general</label>
@@ -3313,17 +3315,19 @@ function subPreservicio(r){
     ${bovCatSel('_presTmp')}
     ${bovIdInput('_presTmp')}
     ${bovExtrasTop('_presTmp')}
-    <div class="sectiontitle">GDR (Grado de Desarrollo Reproductivo)</div>
+    <div class="sectiontitle">GDR (Grado de Desarrollo Reproductivo) <span class="fieldnote" style="display:inline;">opcional</span></div>
     <div class="optrow">
-      ${[1,2,3,4].map(n=>`<div class="optbtn ${p.gdr===n?'selected':''}" onclick="window._presTmp.gdr=${n}; render()">${n}</div>`).join('')}
+      ${[1,2,3,4].map(n=>`<div class="optbtn ${p.gdr===n?'selected':''}" onclick="window._presTmp.gdr=(window._presTmp.gdr===${n}?null:${n}); render()">${n}</div>`).join('')}
     </div>
     <div class="sectiontitle">Destino</div>
     <div class="optrow">
-      ${['IATF','Servicio natural','Descarte','Preñada','Otro'].map(o=>`<div class="optbtn ${p.destino===o?'selected':''}" onclick="window._presTmp.destino='${o}'; if('${o}'!=='Otro') window._presTmp.destinoOtro=''; render()">${o}</div>`).join('')}
+      ${['IATF','Servicio natural','Descarte','Preñada','Otro'].map(o=>`<div class="optbtn ${p.destino===o?'selected':''}" onclick="window._presTmp.destino='${o}'; if('${o}'!=='Otro') window._presTmp.destinoOtro=''; if('${o}'!=='Preñada') window._presTmp.subPrenez=null; render()">${o}</div>`).join('')}
     </div>
+    ${p.destino==='Preñada' ? `<div class="optrow" style="margin-left:12px;">${['Cabeza','Cuerpo','Cola'].map(o=>`<div class="optbtn ${p.subPrenez===o?'selected':''}" onclick="window._presTmp.subPrenez=(window._presTmp.subPrenez==='${o}'?null:'${o}'); render()">${o}</div>`).join('')}</div>` : ''}
     ${p.destino==='Otro' ? `<input type="text" value="${escapeHtml(p.destinoOtro||'')}" oninput="window._presTmp.destinoOtro=this.value" placeholder="¿Cuál destino?">` : ''}
     ${bovExtrasAplic('_presTmp')}
     ${bovMuestraWidget('_presTmp','pres')}
+    ${bovObsWidget('_presTmp')}
     <button class="btn btn-green" onclick="agregarPresRegistro()">${edIdx('pres')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
     ${listaAnimalesCtx('pres')}
     ${botonGuardarSimple('guardarPreservicioFinal')}
@@ -3332,10 +3336,11 @@ function subPreservicio(r){
 function agregarPresRegistro(){
   const p = window._presTmp;
   if(!p.categoria){ showToast('Elegí la categoría (Vaca o Vaquillona)'); return; }
-  if(!p.gdr || !p.destino){ showToast('Completá GDR y destino'); return; }
+  if(!p.gdr && !p.destino){ showToast('Cargá el GDR o el destino'); return; }
   if(dupConfirmar('pres', p.caravana)) return;
   const _er = edIdx('pres')!==null;
-  regGuardar('pres', {...p, caravana:(p.caravana||'').trim()});
+  const _rp = {...p, caravana:(p.caravana||'').trim()}; if(p.destino!=='Preñada') delete _rp.subPrenez;
+  regGuardar('pres', _rp);
   defSet('pres', p, CAMPOS_DEF_REP);
   window._presTmp = tmpFresh('pres');
   if(_er) showToast('Cambios guardados');
@@ -3407,8 +3412,14 @@ function defSet(ctx, obj, campos){
 }
 const CAMPOS_DEF_REP = ['categoria','color','colorOtro','idTipo','aplicaciones','aplicOtra'];
 function defRepKey(ctx){ return ctx==='iatf' ? 'iatf_'+(iatfPaso||'') : ctx; }
-function idTxt(x){ return String(x.caravana||'sin caravana') + (x.idTipo==='fuego' ? ' (fuego)' : ''); }
-function bovSetIdTipo(tmp, v){ const d = window[tmp]; d.idTipo = (v==='fuego') ? 'fuego' : null; render(); }
+function idTipoDef(){ const v = lsGet('iv_idtipo'); return (v==='fuego'||v==='tatuaje') ? v : null; }
+function idTipoGuardarDef(v){ lsSet('iv_idtipo', v||''); }
+function idEtiqueta(x){ return x && x.idTipo==='fuego' ? 'Marca a fuego' : (x && x.idTipo==='tatuaje' ? 'Tatuaje' : 'Caravana'); }
+function idPh(v){ return v==='fuego' ? 'Marca a fuego' : (v==='tatuaje' ? 'Tatuaje' : 'N° de caravana'); }
+const ID_TIPOS = [[null,'Caravana'],['fuego','Marca a fuego'],['tatuaje','Tatuaje']];
+function idBotones(sel, fn){ return ID_TIPOS.map(([v,l])=>`<div class="optbtn ${(sel||null)===v?'selected':''}" onclick="${fn(v)}">${l}</div>`).join(''); }
+function idTxt(x){ return String(x.caravana||'sin caravana') + (x.idTipo==='fuego' ? ' (fuego)' : (x.idTipo==='tatuaje' ? ' (tatuaje)' : '')); }
+function bovSetIdTipo(tmp, v){ const d = window[tmp]; d.idTipo = (v==='fuego'||v==='tatuaje') ? v : null; idTipoGuardarDef(d.idTipo); render(); }
 const TMP_CTX = {_diagTmp:'diag', _presTmp:'pres', _ginTmp:'gin', _iatfTmp:'iatf', _pesoTmp:'pesos'};
 function regsDeT(t, ctx){
   const r = t.exploracionReproductiva || {};
@@ -3454,18 +3465,18 @@ function dupAviso(tmp){
 function bovIdInput(tmp, extraOninput){
   const d = bovExtrasAsegurar(tmp);
   return `<div class="sectiontitle">Identificación</div>
-    <div class="optrow"><div class="optbtn ${d.idTipo!=='fuego'?'selected':''}" onclick="bovSetIdTipo('${tmp}','caravana')">Caravana</div><div class="optbtn ${d.idTipo==='fuego'?'selected':''}" onclick="bovSetIdTipo('${tmp}','fuego')">Marca a fuego</div></div>
-    <input type="text" value="${escapeHtml(d.caravana||'')}" oninput="window['${tmp}'].caravana=this.value${extraOninput||''}; dupAviso('${tmp}')" placeholder="${d.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
+    <div class="optrow">${idBotones(d.idTipo, v=>`bovSetIdTipo('${tmp}',${v?`'${v}'`:'null'})`)}</div>
+    <input type="text" value="${escapeHtml(d.caravana||'')}" oninput="window['${tmp}'].caravana=this.value${extraOninput||''}; dupAviso('${tmp}')" placeholder="${idPh(d.idTipo)}">
     <div id="dup_${tmp}" class="fieldnote" style="color:var(--amber,#d9a21b); font-weight:600;"></div>
     ${TMP_CTX[tmp] ? '<div class="fieldnote">Podés dejarla vacía y asignar la caravana al final con el bastón.</div>' : ''}`;
 }
 // selector caravana / marca a fuego sin re-render (para pantallas con campos de texto sin estado)
 window._idt = {};
 function idTipoWidget(key){
-  const v = window._idt[key] || null;
-  return `<div class="optrow" style="margin-top:4px;"><div class="optbtn ${v!=='fuego'?'selected':''}" onclick="idTipoPick(this,'${key}',null)">Caravana</div><div class="optbtn ${v==='fuego'?'selected':''}" onclick="idTipoPick(this,'${key}','fuego')">Marca a fuego</div></div>`;
+  const v = (key in window._idt) ? window._idt[key] : idTipoDef();
+  return `<div class="optrow" style="margin-top:4px;">${idBotones(v, x=>`idTipoPick(this,'${key}',${x?`'${x}'`:'null'})`)}</div>`;
 }
-function idTipoPick(el, key, v){ window._idt[key] = v; el.parentElement.querySelectorAll('.optbtn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
+function idTipoPick(el, key, v){ window._idt[key] = v; idTipoGuardarDef(v); el.parentElement.querySelectorAll('.optbtn').forEach(b=>b.classList.remove('selected')); el.classList.add('selected'); }
 // ---- Registros por contexto, edición y lista de animales cargados ----
 window._ed = {}; window._fichaAb = {};
 const TMP_DE = {diag:'_diagTmp', pres:'_presTmp', gin:'_ginTmp', iatf:'_iatfTmp'};
@@ -3483,12 +3494,12 @@ function tmpFresh(ctx){
   const rep4 = ['diag','pres','gin','iatf'].includes(ctx);
   const d = defGet(rep4 ? defRepKey(ctx) : ctx), pick = {};
   (rep4 ? CAMPOS_DEF_REP : CAMPOS_DEF_BOV).forEach(k=>{ if(d[k]) pick[k] = Array.isArray(d[k]) ? d[k].slice() : d[k]; });
-  const mu = {muestra:false, muestraObs:''};
+  const mu = {muestra:false, muestraObs:'', observaciones:''};
   if(ctx==='diag') return {caravana:'', resultado:null, subresultado:null, otro:'', ...mu, ...bovExtrasVacios(), ...pick};
-  if(ctx==='pres') return {caravana:'', gdr:null, destino:null, destinoOtro:'', ...mu, ...bovExtrasVacios(), ...pick};
+  if(ctx==='pres') return {caravana:'', gdr:null, destino:null, destinoOtro:'', subPrenez:null, ...mu, ...bovExtrasVacios(), ...pick};
   if(ctx==='gin') return {caravana:'', texto:'', ...mu, ...bovExtrasVacios(), ...pick};
   if(ctx==='iatf') return {caravana:'', conDispositivo:null, pintada:null, obsProt:null, obsProtOtro:'', toro: lsGet('iv_toro'), ...mu, ...bovExtrasVacios(), ...pick};
-  if(ctx==='pesos') return {caravana:'', categoria:pick.categoria||null, peso:'', cc:null, idTipo:pick.idTipo||null};
+  if(ctx==='pesos') return {caravana:'', categoria:pick.categoria||null, peso:'', cc:null, idTipo:pick.idTipo||idTipoDef()};
   return {};
 }
 function edIdx(ctx){ const i = window._ed[ctx]; return (i!==undefined && i!==null && trabajoActual && i<regsDe(ctx).length) ? i : null; }
@@ -3496,7 +3507,7 @@ function regEditar(ctx, i){
   const c = JSON.parse(JSON.stringify(regsDe(ctx)[i]));
   window._ed[ctx] = i;
   if(ctx==='pesos') window._pesoTmp = {caravana:c.caravana, categoria:c.categoria||null, peso:String(c.peso), cc:c.cc||null, idTipo:c.idTipo||null};
-  else window[TMP_DE[ctx]] = {...bovExtrasVacios(), ...c};
+  else window[TMP_DE[ctx]] = {...bovExtrasVacios(), ...c, idTipo:c.idTipo||null};
   if(ctx==='iatf'){ iatfPaso = c.etapa; iatfSel = c.caravana; window._iatfTmp.toro = c.toro || ''; window._vetTmp['iatf'] = c.vet || ''; }
   render(); window.scrollTo(0,0);
 }
@@ -3527,9 +3538,15 @@ function bovMuestraWidget(tmp, ctx){
     ${d.muestra ? `<div class="fieldnote"><b>Tubo N° ${n}</b></div>
     <textarea rows="2" placeholder="Observaciones de la muestra (opcional)" oninput="window['${tmp}'].muestraObs=this.value">${escapeHtml(d.muestraObs||'')}</textarea>` : ''}`;
 }
+function bovObsWidget(tmp){
+  const d = window[tmp];
+  return `<div class="sectiontitle">Observaciones</div>
+    <textarea rows="2" placeholder="Observaciones (opcional)" oninput="window['${tmp}'].observaciones=this.value">${escapeHtml(d.observaciones||'')}</textarea>`;
+}
 function regGuardar(ctx, rec){
   if(['diag','pres','gin','iatf'].includes(ctx)){
     const _i = edIdx(ctx), previo = _i!==null ? regsDe(ctx)[_i] : null;
+    if(rec.observaciones && String(rec.observaciones).trim()) rec.observaciones = String(rec.observaciones).trim(); else delete rec.observaciones;
     if(rec.muestra){
       if(previo && previo.muestraN) rec.muestraN = previo.muestraN;
       else { const k = muestraKey(ctx, rec); if(!trabajoActual.muestraSeq) trabajoActual.muestraSeq = {}; rec.muestraN = muestraSig(k); trabajoActual.muestraSeq[k] = rec.muestraN; }
@@ -3548,17 +3565,17 @@ function detalleLineasReg(ctx, x){
   const L = [], add = (k,v)=>{ if(v!==undefined && v!==null && v!=='') L.push(k+': '+v); };
   add('Identificación', idTxt(x)); add('Categoría', x.categoria);
   if(ctx==='diag'){ add('Resultado', (x.resultado||'')+(x.subresultado?' ('+x.subresultado+')':'')); add('Otro', x.otro); }
-  if(ctx==='pres'){ add('GDR', x.gdr); add('Destino', (x.destino==='Otro'||x.destino==='Otra') ? (x.destinoOtro||'Otro') : x.destino); }
+  if(ctx==='pres'){ add('GDR', x.gdr); add('Destino', ((x.destino==='Otro'||x.destino==='Otra') ? (x.destinoOtro||'Otro') : x.destino)+((x.destino==='Preñada'&&x.subPrenez)?' ('+x.subPrenez+')':'')); }
   if(ctx==='gin') add('Observación', x.texto);
   if(ctx==='iatf'){ add('Paso', IATF_PASOS[x.etapa]); add('Fecha', fmtFecha(x.fecha)); add('Retiro', x.conDispositivo); add('Celo', x.pintada); add('Toro', x.toro); }
   if(ctx==='pesos'){ add('Peso', fmtNum(x.peso,1)+' kg'); if(x.prevPeso!==undefined) add('Anterior', fmtNum(x.prevPeso,1)+' kg ('+fmtFecha(x.prevFecha)+')'); if(x.gdp!==undefined) add('Ganancia diaria', fmtNum(x.gdp,2)+' kg/día'); }
-  add('Color', bovColorTxt(x)); if(ctx!=='pesos' || x.cc) add('Condición corporal', x.cc); add('Aplicaciones', aplicTxt(x)); add('Observaciones', obsProtTxt(x)); add('Toma de muestra', muestraTxt(x)); add('Veterinario actuante', x.vet);
+  add('Color', bovColorTxt(x)); if(ctx!=='pesos' || x.cc) add('Condición corporal', x.cc); add('Aplicaciones', aplicTxt(x)); add('Observaciones', [obsProtTxt(x), x.observaciones].filter(Boolean).join(' — ')); add('Toma de muestra', muestraTxt(x)); add('Veterinario actuante', x.vet);
   return L;
 }
 function resumenCortoReg(ctx, x){
   if(ctx==='andro') return x.cc ? 'CC '+x.cc : '';
   if(ctx==='diag') return (x.resultado||'')+(x.subresultado?' ('+x.subresultado+')':'');
-  if(ctx==='pres') return 'GDR '+(x.gdr||'—')+' · '+(((x.destino==='Otro'||x.destino==='Otra')?(x.destinoOtro||'Otro'):x.destino)||'—');
+  if(ctx==='pres') return [x.gdr?'GDR '+x.gdr:'', ((x.destino==='Otro'||x.destino==='Otra')?(x.destinoOtro||'Otro'):(x.destino||''))+((x.destino==='Preñada'&&x.subPrenez)?' ('+x.subPrenez+')':'')].filter(Boolean).join(' · ');
   if(ctx==='gin') return (x.texto||'').slice(0,30);
   if(ctx==='iatf') return IATF_PASOS[x.etapa]||'';
   if(ctx==='pesos') return fmtNum(x.peso,1)+' kg';
@@ -3632,23 +3649,40 @@ function listaAnimalesCtx(ctx, filtro, titulo){
 
 // ===== IATF en 3 pasos: colocación → retiro → inseminación =====
 let iatfPaso = null, iatfSel = null, iatfBusq = '';
-const IATF_PASOS = {colocacion:'Colocación de dispositivo', retiro:'Retiro de dispositivo', inseminacion:'Inseminación artificial'};
+const IATF_PASOS = {colocacion:'Paso 1 (colocación de dispositivo)', retiro:'Paso 2 (retiro de dispositivo)', inseminacion:'Paso 3 (inseminación artificial)'};
+const OBS_PROT_FUERA = ['Preñada','Descarte por GDR','Pasa al siguiente sincro'];
+function iatfColocado(x){
+  if(x.etapa!=='colocacion') return false;
+  if(!x.proto) return true; // registros anteriores: se consideraban colocados
+  return (x.aplicaciones||[]).includes('Dispositivo') && !OBS_PROT_FUERA.includes(x.obsProt);
+}
+function iatfPaso1Items(col){
+  const c = x=>col.filter(x).length;
+  return [
+    {label:'Dispositivo colocado', n:col.filter(iatfColocado).length},
+    {label:'Preñada', n:c(x=>x.proto && x.obsProt==='Preñada')},
+    {label:'Descarte por GDR', n:c(x=>x.proto && x.obsProt==='Descarte por GDR')},
+    {label:'Pasa al siguiente sincro', n:c(x=>x.proto && x.obsProt==='Pasa al siguiente sincro')},
+    {label:'Sin dispositivo / otro', n:c(x=>!iatfColocado(x) && !(x.proto && OBS_PROT_FUERA.includes(x.obsProt)))}
+  ];
+}
 function lsGet(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
 function lsSet(k,v){ try{ if(v) localStorage.setItem(k,v); else localStorage.removeItem(k); }catch(e){} }
 // Médico veterinario actuante (opcional, se recuerda el último nombre)
 window._vetTmp = {};
+function vetDefault(){ return (trabajoActual && trabajoActual._vet) || lsGet('iv_vet'); }
 function vetWidget(key){
-  const v = (key in window._vetTmp) ? window._vetTmp[key] : lsGet('iv_vet');
+  const v = (key in window._vetTmp) ? window._vetTmp[key] : vetDefault();
   return `<label>Médico veterinario actuante (opcional)</label>
     <div style="display:flex; gap:8px; align-items:center;">
       <input type="text" id="vet_${key}" value="${escapeHtml(v)}" oninput="window._vetTmp['${key}']=this.value" placeholder="Nombre y apellido" style="margin-bottom:0;">
       <button class="btn btn-outline" style="margin:0; width:auto; padding:8px 12px;" onclick="vetBorrar('${key}')">✕</button>
     </div>`;
 }
-function vetBorrar(key){ window._vetTmp[key]=''; lsSet('iv_vet',''); const i=document.getElementById('vet_'+key); if(i) i.value=''; }
+function vetBorrar(key){ window._vetTmp[key]=''; lsSet('iv_vet',''); if(trabajoActual) delete trabajoActual._vet; const i=document.getElementById('vet_'+key); if(i) i.value=''; }
 function vetLeer(key){
-  const v = ((key in window._vetTmp) ? window._vetTmp[key] : lsGet('iv_vet')).trim();
-  if(v) lsSet('iv_vet', v);
+  const v = ((key in window._vetTmp) ? window._vetTmp[key] : vetDefault()).trim();
+  if(v){ lsSet('iv_vet', v); if(trabajoActual && !trabajoActual._vet) trabajoActual._vet = v; }
   delete window._vetTmp[key];
   return v;
 }
@@ -3688,7 +3722,7 @@ function iatfPendientes(paso){
     const ult = por[k];
     if(!ult || (r.fecha||'') > (ult.fecha||'') || ((r.fecha||'')===(ult.fecha||'') && IATF_ORDEN[r.etapa] >= IATF_ORDEN[ult.etapa])) por[k] = r;
   });
-  return Object.values(por).filter(r=>r.etapa===previa).sort((a,b)=>String(a.caravana).localeCompare(String(b.caravana), undefined, {numeric:true}));
+  return Object.values(por).filter(r=>r.etapa===previa && (previa!=='colocacion' || iatfColocado(r))).sort((a,b)=>String(a.caravana).localeCompare(String(b.caravana), undefined, {numeric:true}));
 }
 function iatfListaHTML(){
   const q = iatfBusq.trim().toLowerCase();
@@ -3785,6 +3819,7 @@ function subServicioIatf(r){
     ${bovExtrasTop('_iatfTmp')}
     ${bovExtrasAplic('_iatfTmp')}
     ${bovMuestraWidget('_iatfTmp','iatf')}
+    ${bovObsWidget('_iatfTmp')}
     ${vetWidget('iatf')}
     <button class="btn btn-green" style="margin-top:10px;" onclick="agregarIatfRegistro()">${edIdx('iatf')!==null?'Guardar cambios':(iatfPaso==='colocacion'?'+ Agregar y siguiente animal':'Guardar y volver a buscar')}</button>
     ${listaCargados}
@@ -3799,6 +3834,7 @@ function subServicioIatf(r){
 function iatfDetalle(x){
   const p = [];
   if(obsProtTxt(x)) p.push(obsProtTxt(x).toLowerCase());
+  if(x.observaciones) p.push(x.observaciones);
   if(muestraTxt(x)) p.push(muestraTxt(x));
   if(x.etapa==='retiro' && x.conDispositivo) p.push(x.conDispositivo.toLowerCase());
   if(x.etapa==='inseminacion'){ if(x.pintada) p.push(x.pintada.toLowerCase()); if(x.toro) p.push('toro '+x.toro); }
@@ -3813,12 +3849,13 @@ function agregarIatfRegistro(){
   if((!it.caravana || !it.caravana.trim()) && iatfPaso!=='colocacion'){ showToast('Falta la caravana'); return; }
   if(dupConfirmar('iatf', it.caravana)) return;
   const ei = edIdx('iatf'), previo = ei!==null ? regsDe('iatf')[ei] : null;
-  const rec = {...(previo||{}), etapa: previo ? previo.etapa : iatfPaso, fecha: previo ? previo.fecha : hoyISO(), caravana:(it.caravana||'').trim(), categoria:it.categoria, color:it.color, colorOtro:it.colorOtro, cc:it.cc, aplicaciones:it.aplicaciones, aplicOtra:it.aplicOtra, muestra:it.muestra, muestraObs:it.muestraObs};
-  if(it.idTipo==='fuego') rec.idTipo = 'fuego'; else delete rec.idTipo;
+  const rec = {...(previo||{}), etapa: previo ? previo.etapa : iatfPaso, fecha: previo ? previo.fecha : hoyISO(), caravana:(it.caravana||'').trim(), categoria:it.categoria, color:it.color, colorOtro:it.colorOtro, cc:it.cc, aplicaciones:it.aplicaciones, aplicOtra:it.aplicOtra, muestra:it.muestra, muestraObs:it.muestraObs, observaciones:it.observaciones};
+  if(it.idTipo) rec.idTipo = it.idTipo; else delete rec.idTipo;
   if(paso0()==='colocacion'){ if(it.obsProt){ rec.obsProt = it.obsProt; if(it.obsProt==='Otro') rec.obsProtOtro = (it.obsProtOtro||'').trim(); else delete rec.obsProtOtro; } else { delete rec.obsProt; delete rec.obsProtOtro; } }
   const paso = rec.etapa;
   if(paso==='retiro'){ if(it.conDispositivo) rec.conDispositivo = it.conDispositivo; else delete rec.conDispositivo; }
   if(paso==='inseminacion'){ if(it.pintada) rec.pintada = it.pintada; else delete rec.pintada; if(it.toro){ rec.toro = it.toro; lsSet('iv_toro', it.toro); } else delete rec.toro; }
+  if(paso==='colocacion') rec.proto = 2;
   const v = vetLeer('iatf'); if(v) rec.vet = v; else delete rec.vet;
   regGuardar('iatf', rec);
   defSet(defRepKey('iatf'), it, CAMPOS_DEF_REP);
@@ -3833,7 +3870,7 @@ function cargarFechaRetiroIatf(){
   const f = el && el.value;
   if(!f){ showToast('Elegí la fecha'); return; }
   const sv = trabajoActual.exploracionReproductiva.servicio;
-  const n = sv.iatf.filter(x=>x.etapa==='colocacion').length;
+  const n = sv.iatf.filter(iatfColocado).length;
   if(sv.eventoRetiro && sv.eventoRetiro.id){
     eventos = eventos.filter(e=>e.id!==sv.eventoRetiro.id); deleteEventoDoc(sv.eventoRetiro.id);
   }
@@ -3877,6 +3914,7 @@ function subExamenGinecologico(r){
     <textarea id="gin_texto" oninput="window._ginTmp.texto=this.value" placeholder="Lo que encontrás...">${escapeHtml(g.texto)}</textarea>
     ${bovExtrasAplic('_ginTmp')}
     ${bovMuestraWidget('_ginTmp','gin')}
+    ${bovObsWidget('_ginTmp')}
     <button class="btn btn-green" onclick="agregarGinRegistro()">${edIdx('gin')!==null?'Guardar cambios':'+ Agregar y siguiente animal'}</button>
     ${listaAnimalesCtx('gin')}
   `;
@@ -3909,16 +3947,18 @@ function androToros(t){
   // todos los toros de un trabajo ya guardado (nuevo formato + formato viejo)
   const out = [];
   if(t.examenAndrologico && hasData(t.examenAndrologico)) out.push(t.examenAndrologico);
-  (t.examenAndrologicoLista||[]).forEach(a=>{ if(hasData(a)) out.push(a); });
+  (t.examenAndrologicoLista||[]).forEach(a=>{ if(hasData(a) && !androVacio(a)) out.push(a); });
   return out;
 }
-const AN_DEF = ['raza','edad','color','colorOtro','idTipo'];
+const AN_DEF = ['raza','edad','color','colorOtro','idTipo','vet'];
 function androVacio(a){ if(!a) return true; return !Object.keys(a).some(k=>!AN_DEF.includes(k) && hasData(a[k])); }
 function androFalta(a){ const f = []; if(!a.cc) f.push('la condición corporal'); return f; }
 function androDupConfirmar(a, idx){ return a && a.caravana && dupConfirmar('andro', a.caravana, idx); }
 function androNuevo(){
   const l = androLista(), d = defGet('andro'), n = {};
   AN_DEF.forEach(k=>{ if(d[k]) n[k] = d[k]; });
+  if(!n.idTipo && idTipoDef()) n.idTipo = idTipoDef();
+  if(!n.vet){ const v = vetDefault(); if(v) n.vet = v; }
   l.push(n);
   androIdx = l.length-1;
   render(); window.scrollTo(0,0);
@@ -3964,7 +4004,7 @@ function androDetalleLineas(a){
   const L = [], add = (k,v)=>{ if(v!==undefined && v!==null && v!=='') L.push(k+': '+v); };
   add('Identificación', idTxt(a)); add('Color', bovColorTxt(a)); add('Condición corporal', a.cc); add('Raza', a.raza); add('Edad', a.edad);
   [['locomotor','Ap. locomotor'],['vision','Ap. visión'],['tonoTesticular','Tono testicular'],['glandulasAnexas','Glándulas anexas']].forEach(([k,lab])=>{ add(lab, a[k]+(a[k+'Obs']?' — '+a[k+'Obs']:'')); if(!a[k]) { L.pop(); if(a[k+'Obs']) add(lab, a[k+'Obs']); } });
-  add('Circunferencia escrotal', (a.circunferencia||{}).texto); add('Ecografía testicular', (a.ecografia||{}).texto); add('Calidad seminal', (a.calidadSeminal||{}).texto);
+  add('Observaciones', a.observaciones); add('Veterinario actuante', a.vet); add('Circunferencia escrotal', (a.circunferencia||{}).texto); add('Ecografía testicular', (a.ecografia||{}).texto); add('Calidad seminal', (a.calidadSeminal||{}).texto);
   if(a.raspaje==='Sí') add('Raspaje', a.raspajeTubo?'tubo '+a.raspajeTubo:'sí');
   if(a.sangrado==='Sí') add('Sangrado', a.sangradoTubo?'tubo '+a.sangradoTubo:'sí');
   return L;
@@ -4005,8 +4045,8 @@ function catAndrologicoForm(a, i){
     <button class="backbtn" onclick="androVolverLista()">‹ Lista de toros</button>
     <div class="sectiontitle">Toro ${i+1}</div>
     <div class="sectiontitle">Identificación</div>
-    <div class="optrow"><div class="optbtn ${a.idTipo!=='fuego'?'selected':''}" onclick="setAndrologico('idTipo',null)">Caravana</div><div class="optbtn ${a.idTipo==='fuego'?'selected':''}" onclick="setAndrologico('idTipo','fuego')">Marca a fuego</div></div>
-    <input type="text" id="an_caravana" value="${escapeHtml(a.caravana||'')}" oninput="anSetCampo('caravana',this.value)" placeholder="${a.idTipo==='fuego'?'Marca a fuego':'N° de caravana'}">
+    <div class="optrow">${idBotones(a.idTipo, v=>`setAndrologico('idTipo',${v?`'${v}'`:'null'})`)}</div>
+    <input type="text" id="an_caravana" value="${escapeHtml(a.caravana||'')}" oninput="anSetCampo('caravana',this.value)" placeholder="${idPh(a.idTipo)}">
     <div id="dup_an" class="fieldnote" style="color:var(--amber,#d9a21b); font-weight:600;"></div>
     <div class="fieldnote">Podés dejarla vacía y asignar la caravana al final con el bastón.</div>
     <label>Color</label>
@@ -4045,6 +4085,10 @@ function catAndrologicoForm(a, i){
       <div class="optrow">${['Sí','No'].map(o=>`<div class="optbtn ${a[c]===o?'selected':''}" onclick="anSetSiNo('${c}','${o}')">${o}</div>`).join('')}</div>
       ${a[c]==='Sí' ? `<input type="text" value="${escapeHtml(a[c+'Tubo']||'')}" oninput="anSetCampo('${c}Tubo',this.value)" placeholder="Número de tubo">` : ''}
     `).join('')}
+    <div class="sectiontitle">Observaciones</div>
+    <textarea rows="2" placeholder="Observaciones (opcional)" oninput="anSetCampo('observaciones',this.value)">${escapeHtml(a.observaciones||'')}</textarea>
+    <label>Médico veterinario actuante (opcional)</label>
+    <input type="text" value="${escapeHtml(a.vet||'')}" onchange="anSetCampo('vet',this.value)" placeholder="Nombre y apellido">
     <button class="btn btn-green" style="margin-top:22px;" onclick="androGuardarSiguiente()">Guardar y cargar siguiente toro</button>
     <button class="btn btn-teal" onclick="androVolverLista()">Guardar y volver a la lista</button>
     ${androFichasHTML(androLista(), i, 'androSwitch')}
@@ -4055,6 +4099,7 @@ function anActual(){
   return (androIdx!==null) ? l[androIdx] : null;
 }
 function anSetCampo(campo,valor){ const a=anActual(); if(a) a[campo]=valor;
+  if(campo==='vet' && String(valor).trim()){ lsSet('iv_vet', String(valor).trim()); if(trabajoActual && !trabajoActual._vet) trabajoActual._vet = String(valor).trim(); }
   if(campo==='caravana'){ const el = document.getElementById('dup_an'); if(el) el.textContent = dupCount('andro', valor, androIdx) ? '⚠️ La caravana '+String(valor).trim()+' ya está cargada acá. Revisá que no sea un error.' : ''; } }
 function anSetTexto(campo,valor){
   const a=anActual(); if(!a) return;
@@ -4069,6 +4114,7 @@ function anSetSiNo(campo, v){
 }
 function setAndrologico(campo,valor){
   const a=anActual(); if(a) a[campo]=valor;
+  if(campo==='idTipo') idTipoGuardarDef(valor);
   render();
 }
 function guardarAndrologico(estado){
@@ -4178,7 +4224,7 @@ function agregarAnimalPodal(){
   const existente = q.patologiasPodales.animales.find(a=>a.caravana===val);
   if(!existente){
     const nuevoA = {caravana:val, ...colorNuevo, hallazgos:[]};
-    if(window._idt.podal==='fuego') nuevoA.idTipo = 'fuego';
+    const _it = (('podal' in window._idt) ? window._idt.podal : idTipoDef()); if(_it) nuevoA.idTipo = _it;
     q.patologiasPodales.animales.push(nuevoA);
   } else if(colorNuevo.color){
     Object.assign(existente, colorNuevo);
@@ -4187,7 +4233,7 @@ function agregarAnimalPodal(){
   render();
 }
 function podalForm(){
-  if(!podalWizard || !podalWizard.sel) podalWizard = {sel:{}, procs:[], antib:[], antiinf:[], obs:''};
+  if(!podalWizard || !podalWizard.sel) podalWizard = {sel:{}, procs:[], antib:[], antiinf:[], vend:[], obs:''};
   return podalWizard;
 }
 function podalTogglePat(id){
@@ -4206,12 +4252,12 @@ function podalToggleMiembro(pat, m){
 }
 function podalToggleProc(p){
   const w = podalForm(); const i = w.procs.indexOf(p);
-  if(i>=0){ w.procs.splice(i,1); if(p==='Antibiótico terapia') w.antib=[]; if(p==='Antiinflamatorio') w.antiinf=[]; }
+  if(i>=0){ w.procs.splice(i,1); if(p==='Antibiótico terapia') w.antib=[]; if(p==='Antiinflamatorio') w.antiinf=[]; if(p==='Vendaje') w.vend=[]; }
   else w.procs.push(p);
   render();
 }
 function podalToggleSub(campo, v){
-  const w = podalForm(); const arr = w[campo]; const i = arr.indexOf(v);
+  const w = podalForm(); if(!w[campo]) w[campo] = []; const arr = w[campo]; const i = arr.indexOf(v);
   if(i>=0) arr.splice(i,1); else arr.push(v);
   render();
 }
@@ -4219,6 +4265,7 @@ function podalProcsCompuestos(w){
   return w.procs.map(p=>{
     if(p==='Antibiótico terapia' && w.antib.length) return p+' ('+w.antib.join(', ')+')';
     if(p==='Antiinflamatorio' && w.antiinf.length) return p+' ('+w.antiinf.join(', ')+')';
+    if(p==='Vendaje' && (w.vend||[]).length) return p+' ('+w.vend.join(', ')+')';
     return p;
   });
 }
@@ -4266,14 +4313,14 @@ function podalGrupoTexto(g){
 }
 window._podalOrig = null;
 function podalDesdeGrupo(g){
-  const w = {sel:{}, procs:[], antib:[], antiinf:[], obs:''};
+  const w = {sel:{}, procs:[], antib:[], antiinf:[], vend:[], obs:''};
   g.hall.forEach(h=>{
     if(h.tipo==='otro'){ w.obs = h.otroTexto||''; return; }
     w.sel[h.tipo] = (h.miembros||[]).slice();
     (h.procedimientos||[]).forEach(p=>{
       const m = p.match(/^(.*?) \((.*)\)$/), base = m ? m[1] : p;
       if(!w.procs.includes(base)) w.procs.push(base);
-      if(m){ m[2].split(', ').forEach(x=>{ const arr = base==='Antibiótico terapia' ? w.antib : (base==='Antiinflamatorio' ? w.antiinf : null); if(arr && !arr.includes(x)) arr.push(x); }); }
+      if(m){ m[2].split(', ').forEach(x=>{ const arr = base==='Antibiótico terapia' ? w.antib : (base==='Antiinflamatorio' ? w.antiinf : (base==='Vendaje' ? w.vend : null)); if(arr && !arr.includes(x)) arr.push(x); }); }
     });
   });
   return w;
@@ -4320,6 +4367,7 @@ function catPodalAnimal(){
     <div class="sectiontitle">Procedimientos</div>
     <div class="optrow" style="flex-wrap:wrap;">${PODAL_PROCEDIMIENTOS_FULL.map(p=>`<div class="optbtn ${w.procs.includes(p)?'selected':''}" onclick="podalToggleProc('${p}')">${p}</div>`).join('')}</div>
     ${w.procs.includes('Antibiótico terapia') ? `<div class="fieldnote" style="margin-top:8px;">Antibiótico:</div><div class="optrow" style="flex-wrap:wrap;">${PODAL_ANTIBIOTICOS.map(p=>`<div class="optbtn ${w.antib.includes(p)?'selected':''}" onclick="podalToggleSub('antib','${p}')">${p}</div>`).join('')}</div>` : ''}
+    ${w.procs.includes('Vendaje') ? `<div class="fieldnote" style="margin-top:8px;">Vendaje:</div><div class="optrow" style="flex-wrap:wrap;">${PODAL_VENDAJE.map(p=>`<div class="optbtn ${(w.vend||[]).includes(p)?'selected':''}" onclick="podalToggleSub('vend','${p}')">${p}</div>`).join('')}</div>` : ''}
     ${w.procs.includes('Antiinflamatorio') ? `<div class="fieldnote" style="margin-top:8px;">Antiinflamatorio:</div><div class="optrow" style="flex-wrap:wrap;">${PODAL_ANTIINF.map(p=>`<div class="optbtn ${w.antiinf.includes(p)?'selected':''}" onclick="podalToggleSub('antiinf','${p}')">${p}</div>`).join('')}</div>` : ''}
     <label>Observaciones (dosis, otros detalles)</label>
     <textarea oninput="podalForm().obs=this.value" placeholder="Opcional">${escapeHtml(w.obs||'')}</textarea>
@@ -4381,7 +4429,7 @@ function resumenNutricionBov(n){
 }
 function podalFilas(a){
   return podalGrupos(a).map(g=>{
-    const pats = [], procs = [], ab = [], ai = [], obs = [];
+    const pats = [], procs = [], ab = [], ai = [], vd = [], obs = [];
     g.hall.forEach(h=>{
       if(h.tipo==='otro'){ if(h.otroTexto) obs.push(h.otroTexto); return; }
       const tp = PODAL_TIPOS.find(x=>x.id===h.tipo), mi = (h.miembros||[]).join(', ');
@@ -4390,10 +4438,11 @@ function podalFilas(a){
         const m = p.match(/^(.*?) \((.*)\)$/), base = m?m[1]:p;
         if(base==='Antibiótico terapia' && m) { if(!ab.includes(m[2])) ab.push(m[2]); }
         else if(base==='Antiinflamatorio' && m) { if(!ai.includes(m[2])) ai.push(m[2]); }
+        else if(base==='Vendaje' && m) { if(!vd.includes(m[2])) vd.push(m[2]); }
         if(!procs.includes(base)) procs.push(base);
       });
     });
-    return [...idCols(a), bovColorTxt(a), pats.join('; '), procs.join(', '), ab.join(', '), ai.join(', '), obs.join(' / ')];
+    return [...idCols(a), bovColorTxt(a), pats.join('; '), procs.join(', '), ab.join(', '), ai.join(', '), vd.join(', '), obs.join(' / ')];
   });
 }
 function podalConteoAnimales(animales){
@@ -4411,7 +4460,7 @@ function resumenPatologiasPodales(pq){
   const an = pp.animales.filter(a=>a.hallazgos && a.hallazgos.length);
   if(!an.length) return '';
   let out = `  Patologías podales: ${an.length} animales\n`;
-  out += mkTabla('Patologías podales', [...ID_COLS,'Color','Patología (miembros)','Procedimientos','Antibiótico','Antiinflamatorio','Observaciones'], [].concat(...an.map(podalFilas)));
+  out += mkTabla('Patologías podales', [...ID_COLS,'Color','Patología (miembros)','Procedimientos','Antibiótico','Antiinflamatorio','Vendaje','Observaciones'], [].concat(...an.map(podalFilas)));
   out += mkBarras('Animales por patología podal', podalConteoAnimales(an));
   const mi = []; an.forEach(a=>a.hallazgos.forEach(h=>(h.miembros||[]).forEach(m=>mi.push(m))));
   out += mkBarras('Miembros afectados (hallazgos)', sItems(sCuenta(mi), ['AI','AD','PI','PD']));
@@ -5536,9 +5585,11 @@ function statsHTMLReproductiva(trabs){
   }
   if(pres.length){
     h += sTitulo('Preservicio') + sCards([{n:pres.length, lab:'animales evaluados'}]);
-    h += sBar('GDR (grado de desarrollo reproductivo)', sItems(sCuenta(pres.map(x=>x.gdr)), ['1','2','3','4']).map(i=>({label:'GDR '+i.label, n:i.n})), pres.length);
+    const _cg = pres.filter(x=>x.gdr).length;
+    h += sBar('GDR (grado de desarrollo reproductivo)', sItems(sCuenta(pres.map(x=>x.gdr)), ['1','2','3','4']).map(i=>({label:'GDR '+i.label, n:i.n})), _cg);
     const dest = sCuenta(pres.map(x=> (x.destino==='Otro'||x.destino==='Otra') ? 'Otro' : x.destino));
     h += sBar('Destino', sItems(dest, ['IATF','Servicio natural','Descarte','Preñada','Otro'].filter(k=>dest[k])), pres.length);
+    const _pp = pres.filter(x=>x.destino==='Preñada'); if(_pp.length) h += sBar('Preñadas: cabeza / cuerpo / cola', sItems(sCuenta(_pp.map(x=>x.subPrenez)), ['Cabeza','Cuerpo','Cola']), _pp.length);
     const otros = pres.filter(x=>(x.destino==='Otro'||x.destino==='Otra') && x.destinoOtro).map(x=>`${sApi(x.f)} — caravana ${x.caravana}: ${x.destinoOtro}`);
     h += sLista(otros);
     const cat = sCuenta(pres.map(x=>x.categoria)); if(Object.keys(cat).length) h += sBar('Por categoría', sItems(cat));
@@ -5546,7 +5597,8 @@ function statsHTMLReproductiva(trabs){
   if(iatf.length){
     const col = iatf.filter(x=>x.etapa==='colocacion'), ret = iatf.filter(x=>x.etapa==='retiro'), ia = iatf.filter(x=>x.etapa==='inseminacion'), leg = iatf.filter(x=>!x.etapa);
     h += sTitulo('IATF');
-    h += sCards([{n:col.length, lab:'dispositivos colocados'},{n:ret.length, lab:'retirados'},{n:ia.length, lab:'inseminados'}].concat(leg.length?[{n:leg.length, lab:'registros anteriores'}]:[]));
+    h += sCards([{n:col.filter(iatfColocado).length, lab:'dispositivos colocados'},{n:ret.length, lab:'retirados'},{n:ia.length, lab:'inseminados'}].concat(leg.length?[{n:leg.length, lab:'registros anteriores'}]:[]));
+    h += sBar('Paso 1 (colocación de dispositivo)', iatfPaso1Items(col), col.length);
     h += sBar('Retiros', sItems(sCuenta(ret.map(x=>x.conDispositivo)), ['Con dispositivo','Sin dispositivo']), ret.length);
     h += sBar('Celo al inseminar', sItems(sCuenta(ia.map(x=>x.pintada)), ['Pintada','Despintada']), ia.length);
     h += sBar('Inseminaciones por toro', sItems(sCuenta(ia.map(x=>x.toro))), ia.length);
@@ -6062,8 +6114,8 @@ function mkBarras(titulo, items){
   if(!items.length) return '';
   return `@@G ${mkC(titulo)}|${items.map(i=>mkC(i.label).replace(/:/g,'·')+':'+i.n).join('|')}\n`;
 }
-function idCols(x){ return x.idTipo==='fuego' ? ['', x.caravana||'—'] : [x.caravana||'sin asignar','']; }
-const ID_COLS = ['Caravana','Marca a fuego'];
+function idCols(x){ return x.idTipo==='fuego' ? ['', x.caravana||'—', ''] : (x.idTipo==='tatuaje' ? ['', '', x.caravana||'—'] : [x.caravana||'sin asignar','','']); }
+const ID_COLS = ['Caravana','Marca a fuego','Tatuaje'];
 function mkParse(txt){
   const out = []; let cur = null, buf = [];
   const flush = ()=>{ if(buf.length){ out.push({k:'txt', s:buf.join('\n')}); buf = []; } };
@@ -6161,7 +6213,7 @@ function resumenTrabajo(t){
 }
 function resumenTrabajoBovino(t){
   let out = `Especie: Bovino\n`;
-  if(t.registro && t.registro.caravana) out += `\n${t.registro.idTipo==='fuego'?'Marca a fuego':'Caravana'} de registro: ${t.registro.caravana}${bovColorSufijo(t.registro)}\n`;
+  if(t.registro && t.registro.caravana) out += `\n${idEtiqueta(t.registro)} de registro: ${t.registro.caravana}${bovColorSufijo(t.registro)}\n`;
   if(t.exploracionClinica && hasData(t.exploracionClinica)){
     out += `\nExploración clínica:\n`;
     if(t.exploracionClinica.estadoGeneral) out += `  Estado general: ${t.exploracionClinica.estadoGeneral}\n`;
@@ -6177,17 +6229,18 @@ function resumenTrabajoBovino(t){
       const pren = dg.registros.filter(x=>x.resultado==='Preñada').length;
       const vac = dg.registros.filter(x=>x.resultado==='Vacía').length;
       out += `  Diagnóstico de gestación: ${dg.registros.length} animales (${pren} preñadas, ${vac} vacías)\n`;
-      out += mkTabla('Diagnóstico de gestación', [...ID_COLS,'Categoría','Color','CC','Resultado','Aplicaciones','Toma de muestra'], dg.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', (x.resultado||'—')+(x.subresultado?' ('+x.subresultado+')':'')+(x.otro?', '+x.otro:''), aplicTxt(x), muestraTxt(x)]));
+      out += mkTabla('Diagnóstico de gestación', [...ID_COLS,'Categoría','Color','CC','Resultado','Aplicaciones','Toma de muestra','Observaciones'], dg.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', (x.resultado||'—')+(x.subresultado?' ('+x.subresultado+')':'')+(x.otro?', '+x.otro:''), aplicTxt(x), muestraTxt(x), x.observaciones||'']));
       out += mkBarras('Diagnóstico de gestación', [{label:'Preñadas', n:pren},{label:'Vacías', n:vac}]);
       out += mkBarras('Preñadas según ubicación', ['Cabeza','Cuerpo','Cola'].map(k=>({label:k, n:dg.registros.filter(x=>x.resultado==='Preñada' && x.subresultado===k).length})));
       if(dg.comentario) out += `    Comentario: ${dg.comentario}\n`;
     }
     if(r.preservicio && r.preservicio.registros && r.preservicio.registros.length){
       out += `  Preservicio: ${r.preservicio.registros.length} animales\n`;
-      const _pr = r.preservicio.registros, _dest = x=>(x.destino==='Otra'||x.destino==='Otro')?(x.destinoOtro||'Otro'):(x.destino||'');
-      out += mkTabla('Preservicio', [...ID_COLS,'Categoría','Color','CC','GDR','Destino','Aplicaciones','Toma de muestra'], _pr.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.gdr||'', _dest(x), aplicTxt(x), muestraTxt(x)]));
+      const _pr = r.preservicio.registros, _dest = x=>(x.destino==='Otra'||x.destino==='Otro')?(x.destinoOtro||'Otro'):(x.destino||'')+((x.destino==='Preñada'&&x.subPrenez)?' ('+x.subPrenez+')':'');
+      out += mkTabla('Preservicio', [...ID_COLS,'Categoría','Color','CC','GDR','Destino','Aplicaciones','Toma de muestra','Observaciones'], _pr.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.gdr||'', _dest(x), aplicTxt(x), muestraTxt(x), x.observaciones||'']));
       out += mkBarras('Distribución de GDR', sItems(sCuenta(_pr.map(x=>x.gdr)), Object.keys(sCuenta(_pr.map(x=>x.gdr))).sort()).map(i=>({label:'GDR '+i.label, n:i.n})));
-      out += mkBarras('Destino', sItems(sCuenta(_pr.map(_dest))));
+      out += mkBarras('Destino', sItems(sCuenta(_pr.map(x=>(x.destino==='Otra'||x.destino==='Otro')?'Otro':x.destino))));
+      out += mkBarras('Preñadas según ubicación', ['Cabeza','Cuerpo','Cola'].map(k=>({label:k, n:_pr.filter(x=>x.destino==='Preñada' && x.subPrenez===k).length})));
     }
     if(r.servicio){
       if(r.servicio.iatf && r.servicio.iatf.length){
@@ -6198,15 +6251,16 @@ function resumenTrabajoBovino(t){
         if(_et.length){
           const _s = _et.slice().sort((a,b)=> String(a.caravana).localeCompare(String(b.caravana), undefined, {numeric:true}) || (IATF_ORDEN[a.etapa]-IATF_ORDEN[b.etapa]));
           const _det = x=>{ const p = []; if(x.etapa==='retiro' && x.conDispositivo) p.push(x.conDispositivo); if(x.etapa==='inseminacion'){ if(x.pintada) p.push(x.pintada); if(x.toro) p.push('toro '+x.toro); } if(x.vet) p.push('vet: '+x.vet); return p.join(', '); };
-          out += mkTabla('IATF', [...ID_COLS,'Categoría','Color','CC','Paso','Fecha','Detalle','Observaciones','Aplicaciones','Toma de muestra'], _s.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', IATF_PASOS[x.etapa], fmtFecha(x.fecha), _det(x), obsProtTxt(x), aplicTxt(x), muestraTxt(x)]));
-          out += mkBarras('Animales por paso de IATF', Object.keys(IATF_PASOS).map(k=>({label:IATF_PASOS[k], n:new Set(_et.filter(x=>x.etapa===k).map(x=>x.caravana)).size})));
+          out += mkTabla('IATF', [...ID_COLS,'Categoría','Color','CC','Etapa','Fecha','Detalle','Observaciones','Aplicaciones','Toma de muestra'], _s.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', IATF_PASOS[x.etapa], fmtFecha(x.fecha), _det(x), [obsProtTxt(x), x.observaciones].filter(Boolean).join(' — '), aplicTxt(x), muestraTxt(x)]));
+          out += mkBarras('Paso 1 (colocación de dispositivo)', iatfPaso1Items(_et.filter(x=>x.etapa==='colocacion')));
+          out += mkBarras('Animales por paso de IATF', [{label:'Dispositivo colocado', n:_et.filter(iatfColocado).length},{label:'Retirados', n:_et.filter(x=>x.etapa==='retiro').length},{label:'Inseminados', n:_et.filter(x=>x.etapa==='inseminacion').length}]);
         }
       }
       if(r.servicio.natural) out += `  Servicio natural: ${r.servicio.natural}\n`;
     }
     if(r.examenGinecologico && r.examenGinecologico.registros && r.examenGinecologico.registros.length){
       out += `  Examen ginecológico: ${r.examenGinecologico.registros.length} animales\n`;
-      out += mkTabla('Examen ginecológico', [...ID_COLS,'Categoría','Color','CC','Hallazgos','Aplicaciones','Toma de muestra'], r.examenGinecologico.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.texto||'', aplicTxt(x), muestraTxt(x)]));
+      out += mkTabla('Examen ginecológico', [...ID_COLS,'Categoría','Color','CC','Hallazgos','Aplicaciones','Toma de muestra','Observaciones'], r.examenGinecologico.registros.map(x=>[...idCols(x), x.categoria||'', bovColorTxt(x), x.cc||'', x.texto||'', aplicTxt(x), muestraTxt(x), x.observaciones||'']));
     }
     if(r.observacion) out += `  Observación general: ${r.observacion}\n`;
   }
@@ -6214,7 +6268,7 @@ function resumenTrabajoBovino(t){
   if(toros.length){
     const _bo = (a,k)=> (a[k]||'') + (a[k+'Obs'] ? ((a[k]?' — ':'')+a[k+'Obs']) : '');
     out += `\nExamen andrológico: ${toros.length} ${toros.length===1?'toro':'toros'}\n`;
-    out += mkTabla('Examen andrológico', [...ID_COLS,'Color','Raza','Edad','CC','Ap. locomotor','Ap. visión','Tono testicular','Glándulas anexas'], toros.map(a=>[...idCols(a), bovColorTxt(a), a.raza||'', a.edad||'', a.cc||'', _bo(a,'locomotor'), _bo(a,'vision'), _bo(a,'tonoTesticular'), _bo(a,'glandulasAnexas')]));
+    out += mkTabla('Examen andrológico', [...ID_COLS,'Color','Raza','Edad','CC','Ap. locomotor','Ap. visión','Tono testicular','Glándulas anexas','Observaciones','Veterinario actuante'], toros.map(a=>[...idCols(a), bovColorTxt(a), a.raza||'', a.edad||'', a.cc||'', _bo(a,'locomotor'), _bo(a,'vision'), _bo(a,'tonoTesticular'), _bo(a,'glandulasAnexas'), a.observaciones||'', a.vet||'']));
     toros.forEach(a=>{
       const L = [];
       if(hasData(a.circunferencia)) L.push(`Circunferencia escrotal: ${campoResumen(a.circunferencia)}`);
@@ -6222,7 +6276,7 @@ function resumenTrabajoBovino(t){
       if(hasData(a.calidadSeminal)) L.push(`Calidad seminal: ${campoResumen(a.calidadSeminal)}`);
       if(a.raspaje==='Sí') L.push(`Raspaje: ${a.raspajeTubo?'tubo '+a.raspajeTubo:'sí'}`);
       if(a.sangrado==='Sí') L.push(`Sangrado: ${a.sangradoTubo?'tubo '+a.sangradoTubo:'sí'}`);
-      if(L.length) out += `  ${a.idTipo==='fuego'?'Marca a fuego':'Caravana'} ${a.caravana||'—'}:\n` + L.map(l=>'    '+l).join('\n') + '\n';
+      if(L.length) out += `  ${idEtiqueta(a)} ${a.caravana||'—'}:\n` + L.map(l=>'    '+l).join('\n') + '\n';
     });
     if(toros.length>1){
       out += mkBarras('Condición corporal', [1,2,3,4,5].map(n=>({label:'CC '+n, n:toros.filter(a=>Number(a.cc)===n).length})));
@@ -6248,7 +6302,7 @@ function resumenTrabajoBovino(t){
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
     out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
-    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (${v.idTipo==='fuego'?'marca a fuego':'caravana'} ${v.caravana||'—'}${bovColorTxt(v)?', color '+bovColorTxt(v):''})\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (${idEtiqueta(v).toLowerCase()} ${v.caravana||'—'}${bovColorTxt(v)?', color '+bovColorTxt(v):''})\n    Qué se hizo: ${campoResumen(v)}\n`; });
     out += resumenPatologiasPodales(t.procedimientosQuirurgicos);
     out += resumenSeguimientoCirugia(t.procedimientosQuirurgicos);
   }
