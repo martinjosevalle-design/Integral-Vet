@@ -2375,6 +2375,176 @@ function catProtocoloAnestesico(volverJS, backLabel){
     <button class="btn btn-teal" style="margin-top:16px;" onclick="${volverJS}">Listo, volver</button>
   `;
 }
+// ===== Procedimientos quirúrgicos: varias intervenciones por sistema =====
+const QX_SUTURAS = ['Vicryl','Nylon','Otro'];
+const QX_ATB = ['Tilmicosina','Penicilina','Estreptomicina','Ceftiofur','Otro'];
+const QX_AINE = ['Dexametasona','Flunixin','Ketoprofeno','Otro'];
+const QX_TOP = ['Cura bichera','Nitrofurazona','Crema cicatrizante','Otro'];
+let qxForm = null; // {sistema, idx, bov, item}
+function qxItemVacio(bov){
+  return {id:uid(), organo:'', tipo:'Cirugía', caravana:'', idTipo: bov ? idTipoDef() : null, color:null, colorOtro:'', procedimiento:'',
+    sutura:null, suturaOtro:'', retiro:'', antibiotico:[], antibioticoOtro:'', antiinflamatorio:[], antiinflamatorioOtro:'', topicos:[], topicosOtro:'', observaciones:''};
+}
+function qxItemNuevo(bov){
+  const it = qxItemVacio(bov);
+  it.sutura = 'Nylon'; it.antibiotico = ['Penicilina','Estreptomicina']; it.antiinflamatorio = ['Dexametasona']; it.topicos = ['Nitrofurazona','Cura bichera'];
+  return it;
+}
+// Devuelve las intervenciones de un sistema, sea formato nuevo (items) o el viejo (una sola carga con texto)
+function qxItemsDe(v){
+  if(!v || typeof v!=='object') return [];
+  if(Array.isArray(v.items)) return v.items;
+  if(v.texto) return [{legacy:true, organo:'', tipo:'Cirugía', caravana:v.caravana||'', idTipo:v.idTipo||null, color:v.color||null, colorOtro:v.colorOtro||'', procedimiento:v.texto, seguimiento:v.seguimiento||null}];
+  return [];
+}
+function qxSis(s){
+  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos = {};
+  const pq = trabajoActual.procedimientosQuirurgicos;
+  let v = pq[s];
+  if(!v || typeof v!=='object') v = pq[s] = {items:[], fotos:[]};
+  if(!Array.isArray(v.items)){
+    const its = qxItemsDe(v).map(x=>{ const y = Object.assign(qxItemVacio(false), x); delete y.legacy; y.id = uid(); return y; });
+    v = pq[s] = {items:its, fotos:v.fotos||[]};
+  }
+  if(!v.fotos) v.fotos = [];
+  return v;
+}
+function qxNuevaIntervencion(s){ const bov = trabajoActual.especie==='Bovino'; qxForm = {sistema:s, idx:null, bov, item:qxItemNuevo(bov)}; render(); }
+function qxEditar(s, i){
+  const bov = trabajoActual.especie==='Bovino', v = qxSis(s);
+  if(!v.items[i]) return;
+  qxForm = {sistema:s, idx:i, bov, item:Object.assign(qxItemVacio(bov), JSON.parse(JSON.stringify(v.items[i])))};
+  render();
+}
+function qxQuitar(s, i){
+  if(!confirm('¿Quitar esta intervención?')) return;
+  const v = qxSis(s); v.items.splice(i,1); render();
+}
+function qxSet(campo, val){ qxForm.item[campo] = val; render(); }
+function qxTog(campo, val){
+  const a = qxForm.item[campo] = qxForm.item[campo] || [];
+  const i = a.indexOf(val); if(i>=0) a.splice(i,1); else a.push(val);
+  render();
+}
+function qxSutura(val){ const it = qxForm.item; it.sutura = it.sutura===val ? null : val; render(); }
+function qxIdTipo(v){ qxForm.item.idTipo = (v==='fuego'||v==='tatuaje') ? v : null; idTipoGuardarDef(qxForm.item.idTipo); render(); }
+function qxColor(c){ const it = qxForm.item; it.color = it.color===c ? null : c; render(); }
+function qxMulti(campo, opciones, otroCampo){
+  const it = qxForm.item, sel = it[campo]||[];
+  return `<div class="optrow" style="flex-wrap:wrap;">${opciones.map(o=>`<div class="optbtn ${sel.includes(o)?'selected':''}" onclick="qxTog('${campo}','${o}')">${o}</div>`).join('')}</div>`
+    + (sel.includes('Otro') ? `<input type="text" value="${escapeHtml(it[otroCampo]||'')}" placeholder="¿Cuál?" oninput="qxForm.item.${otroCampo}=this.value">` : '');
+}
+function qxFormHTML(s, volverJS){
+  const f = qxForm, it = f.item, bov = f.bov;
+  return `
+    <button class="backbtn" onclick="qxForm=null; render()">‹ ${s}</button>
+    <div class="sectiontitle">${s} · ${f.idx!=null ? 'Editar intervención' : 'Nueva intervención'}</div>
+    <label>Órgano intervenido</label>
+    <input type="text" value="${escapeHtml(it.organo)}" placeholder="Ej: prepucio, mama, testículo" oninput="qxForm.item.organo=this.value">
+    <div class="optrow" style="margin-top:8px;">
+      ${['Cirugía','Curaciones'].map(t=>`<div class="optbtn ${it.tipo===t?'selected':''}" onclick="qxSet('tipo','${t}')">${t}</div>`).join('')}
+    </div>
+    ${bov ? `
+      <label>Identificación del animal</label>
+      <div class="optrow" style="margin-top:4px;">${idBotones(it.idTipo, v=>`qxIdTipo(${v?`'${v}'`:'null'})`)}</div>
+      <input type="text" value="${escapeHtml(it.caravana)}" placeholder="${idPh(it.idTipo)}" oninput="qxForm.item.caravana=this.value">
+      <label>Color</label>
+      <div class="optrow" style="flex-wrap:wrap;">${BOV_COLORES.map(c=>`<div class="optbtn ${it.color===c?'selected':''}" onclick="qxColor('${c}')">${c}</div>`).join('')}</div>
+      ${it.color==='Otro' ? `<input type="text" value="${escapeHtml(it.colorOtro||'')}" placeholder="¿Qué color?" oninput="qxForm.item.colorOtro=this.value">` : ''}
+    ` : ''}
+    <label>Procedimiento</label>
+    <textarea placeholder="Describí el procedimiento..." oninput="qxForm.item.procedimiento=this.value">${escapeHtml(it.procedimiento)}</textarea>
+    <label>Sutura utilizada</label>
+    <div class="optrow" style="flex-wrap:wrap;">${QX_SUTURAS.map(o=>`<div class="optbtn ${it.sutura===o?'selected':''}" onclick="qxSutura('${o}')">${o}</div>`).join('')}</div>
+    ${it.sutura==='Otro' ? `<input type="text" value="${escapeHtml(it.suturaOtro||'')}" placeholder="¿Cuál?" oninput="qxForm.item.suturaOtro=this.value">` : ''}
+    ${it.sutura ? `<label>Retiro</label><input type="text" value="${escapeHtml(it.retiro||'')}" placeholder="Ej: 15 días" oninput="qxForm.item.retiro=this.value">` : ''}
+    <label>Antibiótico</label>
+    ${qxMulti('antibiotico', QX_ATB, 'antibioticoOtro')}
+    <label>Antiinflamatorio</label>
+    ${qxMulti('antiinflamatorio', QX_AINE, 'antiinflamatorioOtro')}
+    <label>Aplicaciones tópicas</label>
+    ${qxMulti('topicos', QX_TOP, 'topicosOtro')}
+    <label>Observaciones</label>
+    <textarea placeholder="Observaciones..." oninput="qxForm.item.observaciones=this.value">${escapeHtml(it.observaciones)}</textarea>
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="qxGuardar(false)">Guardar</button>
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="qxGuardar(true)">Guardar y cargar otra</button>
+  `;
+}
+function qxGuardar(otra){
+  const f = qxForm, it = f.item;
+  if(!(it.organo||'').trim() && !(it.procedimiento||'').trim() && !(it.observaciones||'').trim()){ showToast('Cargá el órgano o el procedimiento'); return; }
+  ['organo','caravana','procedimiento','suturaOtro','retiro','antibioticoOtro','antiinflamatorioOtro','topicosOtro','observaciones','colorOtro'].forEach(k=>{ it[k] = (it[k]||'').trim(); });
+  if(it.sutura!=='Otro') it.suturaOtro = '';
+  if(!it.sutura) it.retiro = '';
+  if(!(it.antibiotico||[]).includes('Otro')) it.antibioticoOtro = '';
+  if(!(it.antiinflamatorio||[]).includes('Otro')) it.antiinflamatorioOtro = '';
+  if(!(it.topicos||[]).includes('Otro')) it.topicosOtro = '';
+  if(it.color!=='Otro') it.colorOtro = '';
+  const v = qxSis(f.sistema);
+  if(f.idx!=null && v.items[f.idx]) v.items[f.idx] = it; else v.items.push(it);
+  qxForm = otra ? {sistema:f.sistema, idx:null, bov:f.bov, item:qxItemNuevo(f.bov)} : null;
+  showToast(otra ? 'Guardada, cargá la siguiente' : 'Intervención guardada');
+  render();
+  if(otra) window.scrollTo(0,0);
+}
+function qxResumenItem(it){
+  return [it.organo, it.procedimiento].filter(Boolean).join(': ');
+}
+function qxPantalla(s, volverJS){
+  if(qxForm && qxForm.sistema===s) return qxFormHTML(s);
+  const bov = trabajoActual.especie==='Bovino';
+  const v = qxSis(s);
+  return `
+    <button class="backbtn" onclick="qxForm=null; ${volverJS}">‹ Procedimientos quirúrgicos</button>
+    <div class="sectiontitle">${s}</div>
+    <button class="btn btn-teal" onclick="qxNuevaIntervencion('${s}')">+ Nueva intervención</button>
+    ${v.items.length ? `<div class="sectiontitle">Intervenciones cargadas (${v.items.length})</div>` + v.items.map((it,i)=>`
+      <div class="listcard">
+        <div style="font-weight:600;">${escapeHtml(it.organo||'(sin órgano)')} · ${escapeHtml(it.tipo||'Cirugía')}${bov && it.caravana ? ` · ${idEtiqueta(it)} ${escapeHtml(it.caravana)}` : ''}</div>
+        ${it.procedimiento ? `<div class="fieldnote">${escapeHtml(it.procedimiento.length>110 ? it.procedimiento.slice(0,110)+'…' : it.procedimiento)}</div>` : ''}
+        <div style="display:flex; gap:8px; margin-top:6px;">
+          <button class="btn btn-teal" style="padding:4px 10px; font-size:12px; width:auto;" onclick="qxEditar('${s}',${i})">✏️ Ver / editar</button>
+          <button class="btn btn-outline" style="padding:4px 10px; font-size:12px; width:auto;" onclick="qxQuitar('${s}',${i})">Quitar</button>
+        </div>
+      </div>`).join('') : ''}
+    <div class="sectiontitle">Fotos</div>
+    ${fotosBlock(v.fotos, ['procedimientosQuirurgicos',s])}
+    <button class="btn btn-teal" style="margin-top:16px;" onclick="qxForm=null; ${volverJS}">Listo, volver</button>
+  `;
+}
+// ---- Informe ----
+function qxLista(arr, otro){ return (arr||[]).map(x=>x==='Otro' ? (otro||'otro') : x).join(', '); }
+function qxSuturaTxt(it){ if(!it.sutura) return ''; return (it.sutura==='Otro' ? (it.suturaOtro||'otra') : it.sutura) + (it.retiro ? ` (retiro: ${it.retiro})` : ''); }
+function qxTieneContenido(it){ return !!(it && (it.organo||it.procedimiento||it.observaciones)); }
+function qxResumenTexto(pq){
+  let out = '';
+  Object.entries(pq||{}).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{
+    qxItemsDe(v).filter(qxTieneContenido).forEach(it=>{
+      out += `  Sistema intervenido: ${k}${it.organo ? ' — '+it.organo : ''} (${(it.tipo||'Cirugía').toLowerCase()})\n`;
+      if(it.procedimiento) out += `    Procedimiento: ${it.procedimiento}\n`;
+      const su = qxSuturaTxt(it); if(su) out += `    Sutura: ${su}\n`;
+      const ab = qxLista(it.antibiotico, it.antibioticoOtro); if(ab) out += `    Antibiótico: ${ab}\n`;
+      const ai = qxLista(it.antiinflamatorio, it.antiinflamatorioOtro); if(ai) out += `    Antiinflamatorio: ${ai}\n`;
+      const tp = qxLista(it.topicos, it.topicosOtro); if(tp) out += `    Aplicaciones tópicas: ${tp}\n`;
+      if(it.observaciones) out += `    Observaciones: ${it.observaciones}\n`;
+    });
+    if(v && v.fotos && v.fotos.length) out += `    [${v.fotos.length} foto${v.fotos.length===1?'':'s'} adjunta${v.fotos.length===1?'':'s'} en ${k}]\n`;
+  });
+  return out;
+}
+function qxResumenBovino(pq){
+  let out = '';
+  Object.entries(pq||{}).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{
+    const its = qxItemsDe(v).filter(qxTieneContenido);
+    if(its.length){
+      out += `  Sistema intervenido: ${k}\n`;
+      out += mkTabla(`Sistema intervenido: ${k}`, [...ID_COLS,'Color','Órgano','Tipo','Procedimiento','Sutura','Antibiótico','Antiinflamatorio','Aplicaciones tópicas','Observaciones'],
+        its.map(it=>[...idCols(it), bovColorTxt(it), it.organo||'', it.tipo||'Cirugía', it.procedimiento||'', qxSuturaTxt(it), qxLista(it.antibiotico,it.antibioticoOtro), qxLista(it.antiinflamatorio,it.antiinflamatorioOtro), qxLista(it.topicos,it.topicosOtro), it.observaciones||'']));
+    }
+    if(v && v.fotos && v.fotos.length) out += `    [${v.fotos.length} foto${v.fotos.length===1?'':'s'} adjunta${v.fotos.length===1?'':'s'} en ${k}]\n`;
+  });
+  return out;
+}
 function catQuirurgicos(){
   const q = trabajoActual.procedimientosQuirurgicos || {};
   if(seguimientoCirugiaActivo){
@@ -2383,17 +2553,7 @@ function catQuirurgicos(){
   if(protocoloAnestesicoActivo){
     return catProtocoloAnestesico("protocoloAnestesicoActivo=false; navigate('equino-quirurgicos')", "Procedimientos quirúrgicos");
   }
-  if(sistemaQuirurgicoActivo){
-    const dato = q[sistemaQuirurgicoActivo] || {texto:'', fotos:[]};
-    return `
-      <button class="backbtn" onclick="sistemaQuirurgicoActivo=null; navigate('equino-quirurgicos')">‹ Procedimientos quirúrgicos</button>
-      <div class="sectiontitle">${sistemaQuirurgicoActivo}</div>
-      <label>Qué hiciste / indicaste</label>
-      <textarea id="q_texto" placeholder="Describí el procedimiento...">${escapeHtml(dato.texto||'')}</textarea>
-      ${fotosBlock(dato.fotos, ['procedimientosQuirurgicos',sistemaQuirurgicoActivo])}
-      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSistemaQuirurgico()">Listo, volver</button>
-    `;
-  }
+  if(sistemaQuirurgicoActivo) return qxPantalla(sistemaQuirurgicoActivo, "sistemaQuirurgicoActivo=null; navigate('equino-quirurgicos')");
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
     <div class="sectiontitle">Seguimiento</div>
@@ -2411,21 +2571,13 @@ function catQuirurgicos(){
     <div class="sectiontitle">Sistema a intervenir</div>
     <div class="sublist">
       ${SISTEMAS.map(s=>`
-        <div class="subtile" onclick="sistemaQuirurgicoActivo='${s}'; navigate('equino-quirurgicos')">
+        <div class="subtile" onclick="qxForm=null; sistemaQuirurgicoActivo='${s}'; navigate('equino-quirurgicos')">
           <span>${iconoSistema(s)} ${s}</span>${hasData(q[s]) ? '<span class="check">✓</span>' : ''}
         </div>`).join('')}
     </div>
     ${vetWidget('qx')}
     ${botonGuardarSimple('guardarQuirurgicosFinal')}
   `;
-}
-function guardarSistemaQuirurgico(){
-  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos = {};
-  const actual = trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivo] || {texto:'', fotos:[]};
-  actual.texto = document.getElementById('q_texto').value.trim();
-  trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivo] = actual;
-  sistemaQuirurgicoActivo = null;
-  navigate('equino-quirurgicos');
 }
 function guardarQuirurgicosFinal(estado){ qxVetGuardar(); finalizarGuardado(estado); }
 
@@ -4495,8 +4647,8 @@ function catQuirurgicosBovino(){
       <button class="backbtn" onclick="locomotorMenuBovino=false; render()">‹ Sistema a intervenir</button>
       <div class="sectiontitle">Aparato locomotor</div>
       <div class="sublist">
-        <div class="subtile" onclick="locomotorMenuBovino=false; sistemaQuirurgicoActivoBovino='Locomotor'; render()">
-          <span>🩹 Tratamiento individual</span>${q['Locomotor']&&q['Locomotor'].texto?'<span class="check">✓</span>':''}
+        <div class="subtile" onclick="qxForm=null; locomotorMenuBovino=false; sistemaQuirurgicoActivoBovino='Locomotor'; render()">
+          <span>🩹 Tratamiento individual</span>${qxItemsDe(q['Locomotor']).length?'<span class="check">✓</span>':''}
         </div>
         <div class="subtile" onclick="locomotorMenuBovino=false; patologiasPodalesActivo=true; render()">
           <span>🐄 Patologías podales</span>${(q.patologiasPodales&&q.patologiasPodales.animales&&q.patologiasPodales.animales.length)?'<span class="check">✓</span>':''}
@@ -4504,20 +4656,7 @@ function catQuirurgicosBovino(){
       </div>
     `;
   }
-  if(sistemaQuirurgicoActivoBovino){
-    const dato = q[sistemaQuirurgicoActivoBovino] || {caravana:'', texto:'', fotos:[]};
-    return `
-      <button class="backbtn" onclick="sistemaQuirurgicoActivoBovino=null; render()">‹ Procedimientos quirúrgicos</button>
-      <div class="sectiontitle">${sistemaQuirurgicoActivoBovino}</div>
-      <label>Caravana</label>
-      <input type="text" id="qb_caravana" value="${escapeHtml(dato.caravana)}">
-      ${bovColorWidget('qb_'+sistemaQuirurgicoActivoBovino, dato)}
-      <label>Qué hiciste / indicaste</label>
-      <textarea id="qb_texto" placeholder="Describí el procedimiento...">${escapeHtml(dato.texto)}</textarea>
-      ${fotosBlock(dato.fotos, ['procedimientosQuirurgicos',sistemaQuirurgicoActivoBovino])}
-      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSistemaQuirurgicoBovino()">Listo, volver</button>
-    `;
-  }
+  if(sistemaQuirurgicoActivoBovino) return qxPantalla(sistemaQuirurgicoActivoBovino, "sistemaQuirurgicoActivoBovino=null; render()");
   return `
     <button class="backbtn" onclick="volverACategorias()">‹ Categorías</button>
     <div class="sectiontitle">Seguimiento</div>
@@ -4536,27 +4675,15 @@ function catQuirurgicosBovino(){
     <div class="sublist">
       ${SISTEMAS.map(s=>{
         if(s==='Locomotor'){
-          const tieneAlgo = (q['Locomotor']&&q['Locomotor'].texto) || (q.patologiasPodales&&q.patologiasPodales.animales&&q.patologiasPodales.animales.length);
+          const tieneAlgo = qxItemsDe(q['Locomotor']).length || (q.patologiasPodales&&q.patologiasPodales.animales&&q.patologiasPodales.animales.length);
           return `<div class="subtile" onclick="locomotorMenuBovino=true; render()"><span>${iconoSistema(s)} ${s}</span>${tieneAlgo?'<span class="check">✓</span>':''}</div>`;
         }
-        return `<div class="subtile" onclick="sistemaQuirurgicoActivoBovino='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${q[s]&&q[s].texto ? '<span class="check">✓</span>' : ''}</div>`;
+        return `<div class="subtile" onclick="qxForm=null; sistemaQuirurgicoActivoBovino='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${qxItemsDe(q[s]).length ? '<span class="check">✓</span>' : ''}</div>`;
       }).join('')}
     </div>
     ${vetWidget('qx')}
     ${botonGuardarSimple('guardarQuirurgicosBovinoFinal')}
   `;
-}
-function guardarSistemaQuirurgicoBovino(){
-  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos={};
-  const previo = trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivoBovino] || {fotos:[]};
-  trabajoActual.procedimientosQuirurgicos[sistemaQuirurgicoActivoBovino] = {
-    caravana: document.getElementById('qb_caravana').value.trim(),
-    ...bovColorGet('qb_'+sistemaQuirurgicoActivoBovino),
-    texto: document.getElementById('qb_texto').value.trim(),
-    fotos: previo.fotos||[],
-  };
-  bovColorReset('qb_'+sistemaQuirurgicoActivoBovino);
-  sistemaQuirurgicoActivoBovino=null; render();
 }
 function guardarQuirurgicosBovinoFinal(estado){ qxVetGuardar(); finalizarGuardado(estado); }
 
@@ -5106,17 +5233,7 @@ function catQuirurgicosMascota(){
   if(protocoloAnestesicoActivo){
     return catProtocoloAnestesico("protocoloAnestesicoActivo=false; render()", "Procedimientos quirúrgicos");
   }
-  if(mascotaSistemaQuirurgicoActivo){
-    const dato = q[mascotaSistemaQuirurgicoActivo] || {texto:'',fotos:[]};
-    return `
-      <button class="backbtn" onclick="mascotaSistemaQuirurgicoActivo=null; render()">‹ Procedimientos quirúrgicos</button>
-      <div class="sectiontitle">${mascotaSistemaQuirurgicoActivo}</div>
-      <label>Qué hiciste / indicaste</label>
-      <textarea id="qm_texto" placeholder="Describí el procedimiento...">${escapeHtml(dato.texto||'')}</textarea>
-      ${fotosBlock(dato.fotos, ['procedimientosQuirurgicos',mascotaSistemaQuirurgicoActivo])}
-      <button class="btn btn-teal" style="margin-top:16px;" onclick="guardarSistemaQuirurgicoMascota()">Listo, volver</button>
-    `;
-  }
+  if(mascotaSistemaQuirurgicoActivo) return qxPantalla(mascotaSistemaQuirurgicoActivo, "mascotaSistemaQuirurgicoActivo=null; render()");
   return `
     <button class="backbtn" onclick="mascotaProcActivo=null; render()">‹ Procedimientos</button>
     <div class="sectiontitle">Seguimiento</div>
@@ -5133,19 +5250,11 @@ function catQuirurgicosMascota(){
     </div>
     <div class="sectiontitle">Sistema a intervenir</div>
     <div class="sublist">
-      ${SISTEMAS.map(s=>`<div class="subtile" onclick="mascotaSistemaQuirurgicoActivo='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${hasData(q[s])?'<span class="check">✓</span>':''}</div>`).join('')}
+      ${SISTEMAS.map(s=>`<div class="subtile" onclick="qxForm=null; mascotaSistemaQuirurgicoActivo='${s}'; render()"><span>${iconoSistema(s)} ${s}</span>${hasData(q[s])?'<span class="check">✓</span>':''}</div>`).join('')}
     </div>
     ${vetWidget('qx')}
     ${botonGuardarSimple('guardarQuirurgicosMascotaFinal', 'cancelarMascotaProc')}
   `;
-}
-function guardarSistemaQuirurgicoMascota(){
-  if(!trabajoActual.procedimientosQuirurgicos) trabajoActual.procedimientosQuirurgicos={};
-  const actual = trabajoActual.procedimientosQuirurgicos[mascotaSistemaQuirurgicoActivo] || {texto:'',fotos:[]};
-  actual.texto = document.getElementById('qm_texto').value.trim();
-  trabajoActual.procedimientosQuirurgicos[mascotaSistemaQuirurgicoActivo] = actual;
-  mascotaSistemaQuirurgicoActivo = null;
-  render();
 }
 function guardarQuirurgicosMascotaFinal(estado){ qxVetGuardar(); mascotaProcActivo=null; finalizarGuardadoMascota(estado, 'mascota-procedimientos'); }
 
@@ -5316,7 +5425,7 @@ function resumenTrabajoMascota(t){
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
     out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
-    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema intervenido: ${k}\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    out += qxResumenTexto(t.procedimientosQuirurgicos);
     out += resumenSeguimientoCirugia(t.procedimientosQuirurgicos);
   }
   if(t.sanidad && hasData(t.sanidad)){
@@ -5650,8 +5759,7 @@ function cirugiasDeTrabajo(t){
       return;
     }
     if(CLAVES_NO_SISTEMA_QX.includes(k)) return;
-    if(!v || !v.texto) return;
-    add(v.caravana, {sistema:k, texto:v.texto, legacy:v.seguimiento||null});
+    qxItemsDe(v).forEach(it=>{ if(it.tipo==='Curaciones') return; const tx = qxResumenItem(it); if(!tx) return; add(it.caravana, {sistema:k, texto:tx, legacy:it.seguimiento||null}); });
   });
   return Object.values(porAnimal);
 }
@@ -6191,7 +6299,7 @@ function resumenTrabajo(t){
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
     out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
-    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(hasData(v)) out += `  Sistema intervenido: ${k}\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    out += qxResumenTexto(t.procedimientosQuirurgicos);
     out += resumenSeguimientoCirugia(t.procedimientosQuirurgicos);
   }
   if(hasData(t.tratamiento)) out += `\nTratamiento: ${campoResumen(t.tratamiento)}\n`;
@@ -6302,7 +6410,7 @@ function resumenTrabajoBovino(t){
   if(t.procedimientosQuirurgicos && hasData(t.procedimientosQuirurgicos)){
     out += `\nProcedimientos quirúrgicos:\n`;
     out += resumenProtocoloAnestesico(t.procedimientosQuirurgicos);
-    Object.entries(t.procedimientosQuirurgicos).filter(([k])=>!CLAVES_NO_SISTEMA_QX.includes(k)).forEach(([k,v])=>{ if(v && v.texto) out += `  Sistema intervenido: ${k} (${idEtiqueta(v).toLowerCase()} ${v.caravana||'—'}${bovColorTxt(v)?', color '+bovColorTxt(v):''})\n    Qué se hizo: ${campoResumen(v)}\n`; });
+    out += qxResumenBovino(t.procedimientosQuirurgicos);
     out += resumenPatologiasPodales(t.procedimientosQuirurgicos);
     out += resumenSeguimientoCirugia(t.procedimientosQuirurgicos);
   }
